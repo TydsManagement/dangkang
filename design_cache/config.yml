@@ -1,0 +1,6 @@
+LLM: 'ollam/unichat-llama3-chinese-8b'
+EMBEDDINGS: './GanymedeNil/text2vec-large-chinese'
+WEAVIATE_URL: 'http://localhost:8080'
+INDEX_NAME: 'Toyou'
+CHUNK_SIZE: 1000
+DATA_PATH: './data_cn_toyou'
