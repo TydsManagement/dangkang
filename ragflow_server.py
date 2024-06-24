@@ -1,5 +1,5 @@
 #
-#  Copyright 2024 The InfiniFlow Authors. All Rights Reserved.
+#  Copyright 2024 The Toyou Authors. All Rights Reserved.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -37,24 +37,32 @@ from api.versions import get_versions
 
 
 def update_progress():
-    while True:
-        time.sleep(1)
+    """
+    不断循环以更新进度的函数。
+
+    该函数旨在定期调用DocumentService.update_progress()方法来更新某些操作的进度。
+    它通过捕获可能发生的异常并记录错误来确保程序的健壮性。
+
+    注意：此函数会无限循环运行，直到外部干预停止循环或发生无法恢复的错误。
+    """
+    while True:  # 无限循环，以确保进度更新持续进行
+        time.sleep(1)  # 每秒检查一次是否需要更新进度
         try:
-            DocumentService.update_progress()
-        except Exception as e:
-            stat_logger.error("update_progress exception:" + str(e))
+            DocumentService.update_progress()  # 尝试更新文档处理进度
+        except Exception as e:  # 捕获所有可能的异常，以避免进程崩溃
+            stat_logger.error("update_progress exception:" + str(e))  # 记录异常信息，以便于问题追踪和诊断
 
 
 if __name__ == '__main__':
     print("""
-    ____                 ______ __               
-   / __ \ ____ _ ____ _ / ____// /____  _      __
-  / /_/ // __ `// __ `// /_   / // __ \| | /| / /
- / _, _// /_/ // /_/ // __/  / // /_/ /| |/ |/ / 
-/_/ |_| \__,_/ \__, //_/    /_/ \____/ |__/|__/  
-              /____/                             
-
-    """, flush=True)
+████████╗ ██████╗ ██╗   ██╗ ██████╗ ██╗   ██╗     █████╗ ██╗
+╚══██╔══╝██╔═══██╗╚██╗ ██╔╝██╔═══██╗██║   ██║    ██╔══██╗██║
+   ██║   ██║   ██║ ╚████╔╝ ██║   ██║██║   ██║    ███████║██║
+   ██║   ██║   ██║  ╚██╔╝  ██║   ██║██║   ██║    ██╔══██║██║
+   ██║   ╚██████╔╝   ██║   ╚██████╔╝╚██████╔╝    ██║  ██║██║
+   ╚═╝    ╚═════╝    ╚═╝    ╚═════╝  ╚═════╝     ╚═╝  ╚═╝╚═╝
+                                                            
+""", flush=True)
     stat_logger.info(
         f'project base: {utils.file_utils.get_project_base_directory()}'
     )
