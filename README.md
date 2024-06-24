@@ -63,7 +63,7 @@ graph TB
 
 4. *arm系列** 🔍
     ```bash
-    docker build -f Dockerfile_arm  ragflowserver:dev 
+    docker build -f Dockerfile_arm -t  ragflowserver:dev
     ```
     
 
