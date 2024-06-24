@@ -61,6 +61,12 @@ graph TB
     docker logs -f dangkang-server
     ```
 
+4. *arm系列** 🔍
+    ```bash
+    docker build -f Dockerfile_arm  ragflowserver:dev 
+    ```
+    
+
 5. **在浏览器中访问** 🌐
     - 进入浏览器并输入服务器IP地址进行访问。
 
