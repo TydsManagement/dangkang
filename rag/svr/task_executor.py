@@ -250,12 +250,26 @@ def embedding(docs, mdl, parser_config={}, callback=None):
 
 
 def run_raptor(row, chat_mdl, embd_mdl, callback=None):
+    """
+    使用Raptor算法处理文档。
+
+    :param row: 包含文档ID、租户ID、解析配置等信息的字典。
+    :param chat_mdl: 聊天模型，用于生成回复。
+    :param embd_mdl: 嵌入模型，用于将文本编码为向量。
+    :param callback: 回调函数，用于在处理过程中进行回调。
+    :return: 处理后的文档列表和总词数。
+    """
+    # 初始化，通过编码器获取"ok"的向量表示，用于后续向量名称的生成
     vts, _ = embd_mdl.encode(["ok"])
+    # 生成向量名称
     vctr_nm = "q_%d_vec"%len(vts[0])
+
+    # 通过检索器分块加载文档内容和对应的向量表示
     chunks = []
     for d in retrievaler.chunk_list(row["doc_id"], row["tenant_id"], fields=["content_with_weight", vctr_nm]):
         chunks.append((d["content_with_weight"], np.array(d[vctr_nm])))
 
+    # 初始化Raptor对象
     raptor = Raptor(
         row["parser_config"]["raptor"].get("max_cluster", 64),
         chat_mdl,
@@ -264,105 +278,146 @@ def run_raptor(row, chat_mdl, embd_mdl, callback=None):
         row["parser_config"]["raptor"]["max_token"],
         row["parser_config"]["raptor"]["threshold"]
     )
+    # 记录原始块数量
     original_length = len(chunks)
+    # 使用Raptor算法处理文档块
     raptor(chunks, row["parser_config"]["raptor"]["random_seed"], callback)
+
+    # 初始化文档基础信息
     doc = {
         "doc_id": row["doc_id"],
         "kb_id": [str(row["kb_id"])],
         "docnm_kwd": row["name"],
         "title_tks": rag_tokenizer.tokenize(row["name"])
     }
+    # 初始化结果列表和词数计数器
     res = []
     tk_count = 0
+    # 处理Raptor处理后的文档块
     for content, vctr in chunks[original_length:]:
+        # 复制基础文档信息
         d = copy.deepcopy(doc)
+        # 生成文档的唯一ID
         md5 = hashlib.md5()
         md5.update((content + str(d["doc_id"])).encode("utf-8"))
         d["_id"] = md5.hexdigest()
+        # 设置文档的创建时间和戳
         d["create_time"] = str(datetime.datetime.now()).replace("T", " ")[:19]
         d["create_timestamp_flt"] = datetime.datetime.now().timestamp()
+        # 设置文档的向量表示和其他文本处理结果
         d[vctr_nm] = vctr.tolist()
         d["content_with_weight"] = content
         d["content_ltks"] = rag_tokenizer.tokenize(content)
         d["content_sm_ltks"] = rag_tokenizer.fine_grained_tokenize(d["content_ltks"])
+        # 将处理后的文档信息添加到结果列表
         res.append(d)
+        # 累加词数
         tk_count += num_tokens_from_string(content)
+    # 返回处理后的文档列表和总词数
     return res, tk_count
 
 
+
 def main():
+    """
+    主函数，负责执行文档处理流程。
+    这包括收集文档信息、初始化模型、处理文档、嵌入文档内容和索引文档。
+    如果过程中遇到错误，会记录错误并尝试恢复或终止操作。
+    """
+    # 收集文档数据
     rows = collect()
+    # 如果没有收集到数据，则直接返回
     if len(rows) == 0:
         return
 
+    # 遍历每条文档数据
     for _, r in rows.iterrows():
+        # 设置进度回调函数
         callback = partial(set_progress, r["id"], r["from_page"], r["to_page"])
         try:
+            # 初始化嵌入模型
             embd_mdl = LLMBundle(r["tenant_id"], LLMType.EMBEDDING, llm_name=r["embd_id"], lang=r["language"])
         except Exception as e:
+            # 如果初始化失败，记录错误并继续处理下一条文档
             callback(-1, msg=str(e))
             cron_logger.error(str(e))
             continue
 
+        # 判断文档处理类型
         if r.get("task_type", "") == "raptor":
             try:
+                # 初始化聊天模型
                 chat_mdl = LLMBundle(r["tenant_id"], LLMType.CHAT, llm_name=r["llm_id"], lang=r["language"])
+                # 运行Raptor处理流程
                 cks, tk_count = run_raptor(r, chat_mdl, embd_mdl, callback)
             except Exception as e:
+                # 如果处理失败，记录错误并继续处理下一条文档
                 callback(-1, msg=str(e))
                 cron_logger.error(str(e))
                 continue
         else:
+            # 记录开始时间
             st = timer()
+            # 构建文档块
             cks = build(r)
-            cron_logger.info("Build chunks({}): {}".format(r["name"], timer() - st))
-            if cks is None:
+            # 如果构建失败或没有生成块，跳过当前文档
+            if cks is None or not cks:
                 continue
-            if not cks:
-                callback(1., "No chunk! Done!")
-                continue
-            # TODO: exception handler
-            ## set_progress(r["did"], -1, "ERROR: ")
+            # 设置进度并记录构建耗时
             callback(
                 msg="Finished slicing files(%d). Start to embedding the content." %
                     len(cks))
             st = timer()
             try:
+                # 进行内容嵌入
                 tk_count = embedding(cks, embd_mdl, r["parser_config"], callback)
             except Exception as e:
+                # 如果嵌入失败，记录错误并继续处理下一条文档
                 callback(-1, "Embedding error:{}".format(str(e)))
                 cron_logger.error(str(e))
                 tk_count = 0
+            # 记录嵌入耗时
             cron_logger.info("Embedding elapsed({}): {:.2f}".format(r["name"], timer() - st))
+            # 设置进度并准备索引文档
             callback(msg="Finished embedding({:.2f})! Start to build index!".format(timer() - st))
 
+        # 初始化知识库
         init_kb(r)
+        # 计算唯一文档块数量
         chunk_count = len(set([c["_id"] for c in cks]))
+        # 记录开始时间
         st = timer()
+        # 分批索引文档块
         es_r = ""
         es_bulk_size = 16
         for b in range(0, len(cks), es_bulk_size):
             es_r = ELASTICSEARCH.bulk(cks[b:b + es_bulk_size], search.index_name(r["tenant_id"]))
+            # 每128个批次更新一次进度回调
             if b % 128 == 0:
                 callback(prog=0.8 + 0.1 * (b + 1) / len(cks), msg="")
-
+        # 记录索引耗时
         cron_logger.info("Indexing elapsed({}): {:.2f}".format(r["name"], timer() - st))
+        # 如果索引失败，尝试恢复或删除失败的文档
         if es_r:
             callback(-1, "Index failure!")
             ELASTICSEARCH.deleteByQuery(
                 Q("match", doc_id=r["doc_id"]), idxnm=search.index_name(r["tenant_id"]))
             cron_logger.error(str(es_r))
         else:
+            # 检查是否需要取消任务
             if TaskService.do_cancel(r["id"]):
                 ELASTICSEARCH.deleteByQuery(
                     Q("match", doc_id=r["doc_id"]), idxnm=search.index_name(r["tenant_id"]))
                 continue
+            # 完成任务处理，更新文档统计信息
             callback(1., "Done!")
             DocumentService.increment_chunk_num(
                 r["doc_id"], r["kb_id"], tk_count, chunk_count, 0)
+            # 记录任务完成信息
             cron_logger.info(
                 "Chunk doc({}), token({}), chunks({}), elapsed:{:.2f}".format(
                     r["id"], tk_count, len(cks), timer() - st))
+
 
 
 if __name__ == "__main__":
