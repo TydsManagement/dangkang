@@ -61,11 +61,14 @@ graph TB
     docker logs -f dangkang-server
     ```
 
-4. *arm系列** 🔍
+4. *arm系列验证** 🔍
     ```bash
     docker build -f Dockerfile_arm -t  ragflowserver:dev
     ```
-    
+
+    4. 离线镜像系列验证** 🔍
+
+  https://yun.139.com/shareweb/#/w/i/005CiMp5ne7iM，提取码:Octm
 
 5. **在浏览器中访问** 🌐
     - 进入浏览器并输入服务器IP地址进行访问。
