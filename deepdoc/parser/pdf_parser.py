@@ -1,58 +1,80 @@
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
-
+# 导入操作系统模块，用于文件操作和环境变量访问
 import os
+# 导入随机数模块，用于生成随机数
 import random
 
+# 导入xgboost模块，用于机器学习中的梯度提升算法
 import xgboost as xgb
+# 从io模块导入BytesIO类，用于在内存中处理二进制数据
 from io import BytesIO
+# 导入PyTorch模块，用于深度学习框架
 import torch
+# 导入正则表达式模块，用于模式匹配和字符串操作
 import re
+# 导入pdfplumber模块，用于解析PDF文档
 import pdfplumber
+# 设置日志模块的级别为WARNING，减少日志输出
 import logging
+logging.getLogger("pdfminer").setLevel(logging.WARNING)
+# 导入PIL模块，用于图像处理
 from PIL import Image, ImageDraw
+# 导入NumPy模块，用于科学计算
 import numpy as np
+# 导入timeit模块，用于测量代码执行时间
 from timeit import default_timer as timer
+# 导入PyPDF2模块，用于处理PDF文档
 from PyPDF2 import PdfReader as pdf2_read
 
+# 从file_utils模块导入get_project_base_directory函数，用于获取项目基础目录
 from api.utils.file_utils import get_project_base_directory
+# 从vision模块导入OCR、Recognizer、LayoutRecognizer和TableStructureRecognizer类，用于视觉识别
 from deepdoc.vision import OCR, Recognizer, LayoutRecognizer, TableStructureRecognizer
+# 从nlp模块导入rag_tokenizer，用于自然语言处理中的区域关注（RAG）分词
 from rag.nlp import rag_tokenizer
+# 导入deepcopy函数，用于创建对象的深拷贝
 from copy import deepcopy
+# 从huggingface_hub模块导入snapshot_download函数，用于下载Hugging Face Hub上的模型快照
 from huggingface_hub import snapshot_download
 
-logging.getLogger("pdfminer").setLevel(logging.WARNING)
 
 
 class RAGFlowPdfParser:
+    """
+    RAGFlowPdfParser类初始化文档结构识别的各个组件。
+    它负责从PDF文档中提取文本、布局信息，并识别表格结构。
+    还包括上下文计数模型的初始化和加载，用于进一步优化文档结构的理解。
+    """
+
     def __init__(self):
+        """
+        初始化RAGFlowPdfParser实例。
+        设置OCR引擎、布局识别器、表格结构识别器，并初始化上下文计数模型。
+        如果可用，将模型部署到CUDA设备上，并尝试加载预训练模型。
+        """
+        # 初始化OCR引擎，用于从PDF中提取文本。
         self.ocr = OCR()
+        # 根据是否有指定的模型物种，初始化布局识别器。
         if hasattr(self, "model_speciess"):
             self.layouter = LayoutRecognizer("layout." + self.model_speciess)
         else:
             self.layouter = LayoutRecognizer("layout")
+        # 初始化表格结构识别器，用于识别PDF中的表格结构。
         self.tbl_det = TableStructureRecognizer()
 
+        # 初始化上下文计数模型，用于识别文本块的上下文关系。
         self.updown_cnt_mdl = xgb.Booster()
+        # 如果CUDA设备可用，将模型部署到CUDA设备上。
         if torch.cuda.is_available():
             self.updown_cnt_mdl.set_param({"device": "cuda"})
         try:
+            # 尝试从项目基础目录加载预训练的上下文计数模型。
             model_dir = os.path.join(
                 get_project_base_directory(),
                 "rag/res/deepdoc")
             self.updown_cnt_mdl.load_model(os.path.join(
                 model_dir, "updown_concat_xgb.model"))
         except Exception as e:
+            # 如果加载失败，从云端下载模型。
             model_dir = snapshot_download(
                 repo_id="InfiniFlow/text_concat_xgb_v1.0",
                 local_dir=os.path.join(get_project_base_directory(), "rag/res/deepdoc"),
@@ -60,7 +82,9 @@ class RAGFlowPdfParser:
             self.updown_cnt_mdl.load_model(os.path.join(
                 model_dir, "updown_concat_xgb.model"))
 
+        # 初始化页面起始索引，用于跟踪处理的页面。
         self.page_from = 0
+
         """
         If you have trouble downloading HuggingFace models, -_^ this might help!!
 
@@ -74,21 +98,84 @@ class RAGFlowPdfParser:
         """
 
     def __char_width(self, c):
+        """
+        计算字符的宽度。
+
+        这个方法通过比较字符的坐标差值和字符文本的长度，来确定字符的逻辑宽度。
+        它主要用于处理和计算文本显示时每个字符所占据的空间。
+
+        参数:
+            c (dict): 包含字符信息的字典，字典中应包含字符的坐标信息（"x0" 和 "x1"）以及字符的文本内容（"text"）。
+
+        返回:
+            int: 字符的逻辑宽度，计算方式为字符的右边界坐标减去左边界坐标，然后除以字符文本长度的最大值（防止除以0）。
+        """
+        # 计算字符的宽度，考虑到字符可能为空的情况，使用max确保除数不为0
         return (c["x1"] - c["x0"]) // max(len(c["text"]), 1)
 
     def __height(self, c):
+        """
+        计算给定字典表示的窗口的高度。
+
+        参数:
+            c (dict): 包含窗口顶部和底部坐标的字典。
+
+        返回:
+            int: 窗口的高度，通过底部减去顶部得到。
+        """
         return c["bottom"] - c["top"]
 
     def _x_dis(self, a, b):
+        """
+        计算两个物体在x轴方向上的最小距离。
+
+        该函数通过比较物体a和物体b在x轴上的不同位置组合下的距离，找出最小的x轴距离。
+        物体的位置由字典表示，包含"x0"和"x1"两个键，分别代表物体在x轴上的两个点。
+
+        参数:
+        a (dict): 表示物体a的字典，包含"x0"和"x1"两个键值对。
+        b (dict): 表示物体b的字典，包含"x0"和"x1"两个键值对。
+
+        返回:
+        float: 返回物体a和物体b在x轴方向上的最小距离。
+        """
+        # 计算三种可能的x轴距离差，并返回最小值
+        # 第一种情况：a的x0到b的x0的距离
+        # 第二种情况：a的x1到b的x1的距离
+        # 第三种情况：a和b的x坐标和的差的一半，用于处理物体横跨x轴的情况
         return min(abs(a["x1"] - b["x0"]), abs(a["x0"] - b["x1"]),
                    abs(a["x0"] + a["x1"] - b["x0"] - b["x1"]) / 2)
 
-    def _y_dis(
-            self, a, b):
-        return (
-                       b["top"] + b["bottom"] - a["top"] - a["bottom"]) / 2
+    def _y_dis(self, a, b):
+        """
+        计算两个矩形在y轴方向上的距离。
+
+        该函数用于处理两个矩形在垂直方向上的相对位置，通过计算它们顶部和底部之间的净间隔的一半，
+        来得到一个矩形的中心到另一个矩形中心的y轴距离。
+
+        参数:
+        a (dict): 第一个矩形的边界信息，包含"top"和"bottom"两个键值对。
+        b (dict): 第二个矩形的边界信息，包含"top"和"bottom"两个键值对。
+
+        返回:
+        float: 两个矩形中心在y轴方向上的距离。
+        """
+        # 计算两个矩形顶部和底部之间的总距离，然后除以2得到中心点的垂直距离
+        return (b["top"] + b["bottom"] - a["top"] - a["bottom"]) / 2
 
     def _match_proj(self, b):
+        """
+        检查文本是否符合特定的项目标记模式。
+
+        该函数通过匹配一系列正则表达式来判断给定文本是否包含项目标记。这些标记通常是用于区分不同项目的符号或数字序列。
+
+        参数:
+        b: 字典, 包含待检查文本的字典项。
+
+        返回:
+        布尔值, 如果文本匹配任何项目标记模式，则返回True，否则返回False。
+        """
+        # 定义项目标记的正则表达式列表
         proj_patt = [
             r"第[零一二三四五六七八九十百]+章",
             r"第[零一二三四五六七八九十百]+[条节]",
@@ -99,156 +186,300 @@ class RAGFlowPdfParser:
             r"[0-9]+\.[0-9.]+(、|\.[ 　])",
             r"[⚫•➢①② ]",
         ]
+
+        # 遍历所有正则表达式，如果任何正则表达式与文本匹配，则返回True
         return any([re.match(p, b["text"]) for p in proj_patt])
 
     def _updown_concat_features(self, up, down):
+        """
+        结合上下文特征，用于特征工程中的向量拼接。
+
+        参数:
+        up: 上文的特征字典。
+        down: 下文的特征字典。
+
+        返回:
+        fea: 结合上下文后的特征列表。
+        """
+        # 计算上下文的最大字符宽度
         w = max(self.__char_width(up), self.__char_width(down))
+        # 计算上下文的最大高度
         h = max(self.__height(up), self.__height(down))
+        # 计算上下文的y方向间距
         y_dis = self._y_dis(up, down)
+        # 定义特征长度
         LEN = 6
+        # 分割并获取下文前LEN个字符的特征
         tks_down = rag_tokenizer.tokenize(down["text"][:LEN]).split(" ")
+        # 分割并获取上文后LEN个字符的特征
         tks_up = rag_tokenizer.tokenize(up["text"][-LEN:]).split(" ")
-        tks_all = up["text"][-LEN:].strip() \
-                  + (" " if re.match(r"[a-zA-Z0-9]+",
-                                     up["text"][-1] + down["text"][0]) else "") \
-                  + down["text"][:LEN].strip()
+        # 拼接上下文LEN个字符的特征，考虑字符间是否需要添加空格
+        tks_all = up["text"][-LEN:].strip() + \
+                  (" " if re.match(r"[a-zA-Z0-9]+", up["text"][-1] + down["text"][0]) else "") + \
+                  down["text"][:LEN].strip()
+        # 对拼接后的特征进行分词
         tks_all = rag_tokenizer.tokenize(tks_all).split(" ")
+
+        # 初始化特征列表
         fea = [
+            # 判断上下文是否在同一行
             up.get("R", -1) == down.get("R", -1),
+            # y方向间距与高度的比值
             y_dis / h,
+            # 上下文页码差
             down["page_number"] - up["page_number"],
+            # 判断上下文布局类型是否相同
             up["layout_type"] == down["layout_type"],
+            # 判断上文是否为文本类型
             up["layout_type"] == "text",
+            # 判断下文是否为文本类型
             down["layout_type"] == "text",
+            # 判断上文是否为表格类型
             up["layout_type"] == "table",
+            # 判断下文是否为表格类型
             down["layout_type"] == "table",
-            True if re.search(
-                r"([。？！；!?;+)）]|[a-z]\.)$",
-                up["text"]) else False,
+            # 判断上文是否以标点符号结尾
+            True if re.search(r"([。？！；!?;+)）]|[a-z]\.)$", up["text"]) else False,
+            # 判断上文是否以逗号、数字或特定符号结尾
             True if re.search(r"[，：‘“、0-9（+-]$", up["text"]) else False,
-            True if re.search(
-                r"(^.?[/,?;:\]，。；：’”？！》】）-])",
-                down["text"]) else False,
+            # 判断下文是否以特定标点符号开头
+            True if re.search(r"(^.?[/,?;:\]，。；：’”？！》】）-])", down["text"]) else False,
+            # 判断上文是否为括号内的内容
             True if re.match(r"[\(（][^\(\)（）]+[）\)]$", up["text"]) else False,
+            # 判断上文是否以逗号结尾且后面有内容
             True if re.search(r"[，,][^。.]+$", up["text"]) else False,
+            # 重复的特征，可能是代码复制粘贴的错误
             True if re.search(r"[，,][^。.]+$", up["text"]) else False,
-            True if re.search(r"[\(（][^\)）]+$", up["text"])
-                    and re.search(r"[\)）]", down["text"]) else False,
+            # 判断上下文之间是否存在匹配的括号
+            True if re.search(r"[\(（][^\)）]+$", up["text"]) and re.search(r"[\)）]", down["text"]) else False,
+            # 判断下文是否与上文在相同列中
             self._match_proj(down),
+            # 判断下文是否以大写字母开头
             True if re.match(r"[A-Z]", down["text"]) else False,
+            # 判断上文是否以大写字母结尾
             True if re.match(r"[A-Z]", up["text"][-1]) else False,
+            # 判断上文是否以小写字母或数字结尾
             True if re.match(r"[a-z0-9]", up["text"][-1]) else False,
+            # 判断下文是否以数字、百分比、逗号或破折号开头
             True if re.match(r"[0-9.%,-]+$", down["text"]) else False,
-            up["text"].strip()[-2:] == down["text"].strip()[-2:] if len(up["text"].strip()
-                                                                        ) > 1 and len(
-                down["text"].strip()) > 1 else False,
+            # 判断上文最后两个字符是否与下文相同
+            up["text"].strip()[-2:] == down["text"].strip()[-2:] if len(up["text"].strip()) > 1 and len(down["text"].strip()) > 1 else False,
+            # 判断上文的左边界是否在下文的右边界左侧
             up["x0"] > down["x1"],
-            abs(self.__height(up) - self.__height(down)) / min(self.__height(up),
-                                                               self.__height(down)),
+            # 计算高度差与最小高度的比值
+            abs(self.__height(up) - self.__height(down)) / min(self.__height(up), self.__height(down)),
+            # 计算x方向间距与最大宽度的比值
             self._x_dis(up, down) / max(w, 0.000001),
+            # 计算上文和下文文本长度的差异，反映信息量的差异
             (len(up["text"]) - len(down["text"])) /
             max(len(up["text"]), len(down["text"])),
+            # 计算总词数减去上文和下文词数的差，反映信息的完整性
             len(tks_all) - len(tks_up) - len(tks_down),
+            # 计算下文词数减去上文词数的差，反映信息的偏向性
             len(tks_down) - len(tks_up),
+            # 判断上文和下文的最后一个词是否相同，反映信息的连贯性
             tks_down[-1] == tks_up[-1],
+            # 取上文和下文中in_row值较大的一个，反映信息的重要程度
             max(down["in_row"], up["in_row"]),
+            # 计算上文和下文中in_row值的差，反映信息的分布变化
             abs(down["in_row"] - up["in_row"]),
+            # 判断下文是否只有一个词且被标记为名词，反映信息的特定类型
             len(tks_down) == 1 and rag_tokenizer.tag(tks_down[0]).find("n") >= 0,
+            # 判断上文是否只有一个词且被标记为名词，反映信息的特定类型
             len(tks_up) == 1 and rag_tokenizer.tag(tks_up[0]).find("n") >= 0
         ]
         return fea
 
     @staticmethod
     def sort_X_by_page(arr, threashold):
-        # sort using y1 first and then x1
+        """
+        按页面编号、X坐标及顶部位置对数组进行排序。
+
+        首先，根据页面编号、元素的左边缘X坐标及顶部位置对数组进行初步排序，确保大致顺序。
+        随后，对顺序进行细致调整：如果在同一页面上，当前元素与前一个元素的X坐标差距小于设定阈值，并且当前元素的顶部位置更低，则交换这两个元素的位置。
+
+        参数:
+        arr: 一个字典列表，每个字典包含页面编号、X坐标、顶部位置等信息。
+        threashold: 判断X坐标接近程度的阈值。
+
+        返回:
+        排序后的数组。
+        """
+        # 根据页面编号、X坐标（左边缘）及顶部位置进行初步排序
+        # 使用y坐标作为第二关键字进行排序
         arr = sorted(arr, key=lambda r: (r["page_number"], r["x0"], r["top"]))
+
+        # 对排序结果进行详细调整
         for i in range(len(arr) - 1):
             for j in range(i, -1, -1):
-                # restore the order using th
+                # 检查条件：X坐标差值小于阈值，后一元素顶部位置更低，且在同一页面上
+                # 根据上述条件调整元素顺序
                 if abs(arr[j + 1]["x0"] - arr[j]["x0"]) < threashold \
                         and arr[j + 1]["top"] < arr[j]["top"] \
                         and arr[j + 1]["page_number"] == arr[j]["page_number"]:
+                    # 交换两个相邻元素的位置
                     tmp = arr[j]
                     arr[j] = arr[j + 1]
                     arr[j + 1] = tmp
+        # 返回最终排序完成的数组
         return arr
 
     def _has_color(self, o):
+        """
+        判断对象是否包含颜色信息。
+
+        该方法主要用于分析给定对象是否具有颜色属性。如果对象的颜色属性符合特定条件，
+        则认为该对象不包含颜色信息；否则，认为包含颜色信息。
+
+        参数:
+        o: 字典类型的对象，包含颜色相关的属性。
+
+        返回值:
+        布尔类型，如果对象不包含颜色信息，则返回True；否则返回False。
+        """
+        # 检查颜色空间是否为“DeviceGray”，即单色空间
         if o.get("ncs", "") == "DeviceGray":
+            # 检查填充色和描边色是否均为纯黑色（值为1）
             if o["stroking_color"] and o["stroking_color"][0] == 1 and o["non_stroking_color"] and \
                     o["non_stroking_color"][0] == 1:
+                # 如果对象文本符合特定正则表达式模式，则认为不包含颜色信息
+                # 这里的正则表达式用于匹配一些特定的文本模式，具体含义可能需要结合上下文进一步理解
                 if re.match(r"[a-zT_\[\]\(\)-]+", o.get("text", "")):
                     return False
+        # 默认情况下，认为对象包含颜色信息
         return True
 
+
     def _table_transformer_job(self, ZM):
+        """
+        处理表格识别任务。
+
+        对页面中的表格进行定位和识别，将识别出的表格组件存储起来。
+
+        参数:
+        ZM: 表格放大倍数，用于调整表格边界。
+        """
+        # 记录日志信息，表示开始处理表格
         logging.info("Table processing...")
         imgs, pos = [], []
         tbcnt = [0]
+        # 定义表格边界的缓冲区大小
         MARGIN = 10
+        # 初始化存储表格组件的列表
         self.tb_cpns = []
+        # 确保页面布局和图片的数量一致
         assert len(self.page_layout) == len(self.page_images)
+        # 遍历每个页面上的表格
         for p, tbls in enumerate(self.page_layout):  # for page
+            # 筛选出页面上的表格组件
             tbls = [f for f in tbls if f["type"] == "table"]
+            # 记录当前页面上的表格数量
             tbcnt.append(len(tbls))
+            # 如果当前页面没有表格，则跳过
             if not tbls:
                 continue
+            # 遍历当前页面上的每个表格
             for tb in tbls:  # for table
+                # 计算表格的边界，并考虑边界的缓冲区
                 left, top, right, bott = tb["x0"] - MARGIN, tb["top"] - MARGIN, \
                                          tb["x1"] + MARGIN, tb["bottom"] + MARGIN
+                # 将边界值转换为指定的单位
                 left *= ZM
                 top *= ZM
                 right *= ZM
                 bott *= ZM
+                # 记录表格的位置信息
                 pos.append((left, top))
+                # 截取表格对应的图片区域
                 imgs.append(self.page_images[p].crop((left, top, right, bott)))
 
+        # 确保处理后的表格数量与页面数量一致
         assert len(self.page_images) == len(tbcnt) - 1
+        # 如果没有截取到任何表格图片，则直接返回
         if not imgs:
             return
+        # 使用表格检测算法识别每个表格中的组件
         recos = self.tbl_det(imgs)
+        # 计算每个页面上累计的表格数量，用于后续的表格组件定位
         tbcnt = np.cumsum(tbcnt)
+        # 遍历每个页面，对页面上的每个表格进行处理
         for i in range(len(tbcnt) - 1):  # for page
             pg = []
+            # 遍历当前页面上的每个表格，以及对应的识别结果
             for j, tb_items in enumerate(
                     recos[tbcnt[i]: tbcnt[i + 1]]):  # for table
+                # 获取当前表格的位置信息
                 poss = pos[tbcnt[i]: tbcnt[i + 1]]
+                # 遍历当前表格中的每个组件，调整其位置信息
                 for it in tb_items:  # for table components
+                    # 根据表格的位置信息，调整组件的绝对位置
                     it["x0"] = (it["x0"] + poss[j][0])
                     it["x1"] = (it["x1"] + poss[j][0])
                     it["top"] = (it["top"] + poss[j][1])
                     it["bottom"] = (it["bottom"] + poss[j][1])
+                    # 将位置信息转换为原始单位
                     for n in ["x0", "x1", "top", "bottom"]:
                         it[n] /= ZM
+                    # 根据页面的累计高度，调整组件的垂直位置
                     it["top"] += self.page_cum_height[i]
                     it["bottom"] += self.page_cum_height[i]
+                    # 添加页面编号和表格编号信息
                     it["pn"] = i
                     it["layoutno"] = j
+                    # 将处理后的表格组件添加到结果列表中
                     pg.append(it)
+            # 将当前页面的所有表格组件添加到全局列表中
             self.tb_cpns.extend(pg)
 
+
         def gather(kwd, fzy=10, ption=0.6):
+            """
+            根据关键词聚集相关元素。
+
+            本函数主要用于从一组元素中，根据提供的关键词和模糊匹配程度，
+            以及布局清理参数，筛选并聚集出符合条件的元素集合。
+
+            参数:
+            kwd: str - 用于匹配的关键词。
+            fzy: int - 模糊匹配的阈值，用于控制匹配的宽松程度。
+            ption: float - 布局清理的阈值，用于控制在清理布局时的保留程度。
+
+            返回:
+            list - 匹配并聚集后的元素列表。
+            """
+            # 根据关键词模糊匹配元素，并按照Y轴排序
             eles = Recognizer.sort_Y_firstly(
                 [r for r in self.tb_cpns if re.match(kwd, r["label"])], fzy)
+            # 清理元素布局，并进行第二次Y轴排序
             eles = Recognizer.layouts_cleanup(self.boxes, eles, 5, ption)
             return Recognizer.sort_Y_firstly(eles, 0)
 
+
         # add R,H,C,SP tag to boxes within table layout
+        # 通过正则表达式收集表格中的头部分组
         headers = gather(r".*header$")
+        # 收集表格中的行元素，包括行和头
         rows = gather(r".* (row|header)")
+        # 收集表格中的跨列元素
         spans = gather(r".*spanning")
+        # 筛选并排序表格中的列元素
         clmns = sorted([r for r in self.tb_cpns if re.match(
             r"table column$", r["label"])], key=lambda x: (x["pn"], x["layoutno"], x["x0"]))
+        # 对列元素进行布局清理
         clmns = Recognizer.layouts_cleanup(self.boxes, clmns, 5, 0.5)
+        # 遍历所有框，为属于表格布局的框添加标识
         for b in self.boxes:
+            # 如果框的布局类型不是表格，则跳过
             if b.get("layout_type", "") != "table":
                 continue
+            # 查找与框重叠的行元素，并为框添加行标识
             ii = Recognizer.find_overlapped_with_threashold(b, rows, thr=0.3)
             if ii is not None:
                 b["R"] = ii
                 b["R_top"] = rows[ii]["top"]
                 b["R_bott"] = rows[ii]["bottom"]
 
+            # 查找与框重叠的头元素，并为框添加头标识及相关位置信息
             ii = Recognizer.find_overlapped_with_threashold(
                 b, headers, thr=0.3)
             if ii is not None:
@@ -258,12 +489,14 @@ class RAGFlowPdfParser:
                 b["H_right"] = headers[ii]["x1"]
                 b["H"] = ii
 
+            # 查找与框水平紧密匹配的列元素，并为框添加列标识及相关位置信息
             ii = Recognizer.find_horizontally_tightest_fit(b, clmns)
             if ii is not None:
                 b["C"] = ii
                 b["C_left"] = clmns[ii]["x0"]
                 b["C_right"] = clmns[ii]["x1"]
 
+            # 查找与框重叠的跨列元素，并为框添加跨列标识及相关位置信息
             ii = Recognizer.find_overlapped_with_threashold(b, spans, thr=0.3)
             if ii is not None:
                 b["H_top"] = spans[ii]["top"]
@@ -272,12 +505,29 @@ class RAGFlowPdfParser:
                 b["H_right"] = spans[ii]["x1"]
                 b["SP"] = ii
 
+
     def __ocr(self, pagenum, img, chars, ZM=3):
+        """
+        使用OCR技术识别图像中的字符，并将识别结果整理为结构化数据。
+
+        参数:
+        pagenum: int, 图像对应的页码。
+        img: Image对象, 需要识别的图像。
+        chars: List[Dict], 原始字符的列表，每个字符由一个字典表示。
+        ZM: int, 图像缩放因子，默认为3。
+
+        返回:
+        无返回值，但将识别结果更新到self.boxes中。
+        """
+        # 使用OCR检测技术获取图像中的文本框边界
         bxs = self.ocr.detect(np.array(img))
+        # 如果没有检测到文本框，则添加一个空列表到self.boxes中并返回
         if not bxs:
             self.boxes.append([])
             return
+        # 整理OCR检测结果，只保留文本框的左上角和右下角坐标
         bxs = [(line[0], line[1][0]) for line in bxs]
+        # 根据整理后的边界框和页面缩放因子，计算并排序文本框的中间点坐标
         bxs = Recognizer.sort_Y_firstly(
             [{"x0": b[0][0] / ZM, "x1": b[1][0] / ZM,
               "top": b[0][1] / ZM, "text": "", "txt": t,
@@ -286,24 +536,31 @@ class RAGFlowPdfParser:
             self.mean_height[-1] / 3
         )
 
+        # 对检测到的字符进行处理，尝试将它们合并到相应的文本框中
         # merge chars in the same rect
         for c in Recognizer.sort_X_firstly(
                 chars, self.mean_width[pagenum - 1] // 4):
+            # 寻找与当前字符重叠的文本框
             ii = Recognizer.find_overlapped(c, bxs)
+            # 如果没有找到重叠的文本框，则将字符添加到左侧未匹配字符列表中
             if ii is None:
                 self.lefted_chars.append(c)
                 continue
+            # 如果字符与文本框的高度差异过大，或字符为空格，则也将其添加到左侧未匹配字符列表中
             ch = c["bottom"] - c["top"]
             bh = bxs[ii]["bottom"] - bxs[ii]["top"]
             if abs(ch - bh) / max(ch, bh) >= 0.7 and c["text"] != ' ':
                 self.lefted_chars.append(c)
                 continue
+            # 如果字符是空格且文本框已有文本，则将空格添加到文本框中
             if c["text"] == " " and bxs[ii]["text"]:
                 if re.match(r"[0-9a-zA-Z,.?;:!%%]", bxs[ii]["text"][-1]):
                     bxs[ii]["text"] += " "
+            # 否则，将字符添加到文本框的文本中
             else:
                 bxs[ii]["text"] += c["text"]
 
+        # 对于没有文本的文本框，使用OCR技术进行再次识别
         for b in bxs:
             if not b["text"]:
                 left, right, top, bott = b["x0"] * ZM, b["x1"] * \
@@ -311,11 +568,14 @@ class RAGFlowPdfParser:
                 b["text"] = self.ocr.recognize(np.array(img),
                                                np.array([[left, top], [right, top], [right, bott], [left, bott]],
                                                         dtype=np.float32))
+            # 删除临时字段"txt"
             del b["txt"]
+        # 移除没有文本的文本框，并更新页面的平均字符高度
         bxs = [b for b in bxs if b["text"]]
         if self.mean_height[-1] == 0:
             self.mean_height[-1] = np.median([b["bottom"] - b["top"]
                                               for b in bxs])
+        # 将处理后的文本框列表添加到self.boxes中
         self.boxes.append(bxs)
 
     def _layouts_rec(self, ZM, drop=True):
