@@ -579,70 +579,116 @@ class RAGFlowPdfParser:
         self.boxes.append(bxs)
 
     def _layouts_rec(self, ZM, drop=True):
+        """
+       递归处理页面元素的版面布局。
+
+       此方法根据布局结果调整元素位置，确保元素根据其所在页码及页面累计高度正确放置。
+
+       参数:
+       缩放因子ZM : int
+           用于调整布局的缩放因子。
+       drop : bool, 可选
+           指示是否丢弃无法布局的元素，默认为True。
+
+       返回:
+           无
+       """
+        # 断言页面图片数量与边界框数量相等
         assert len(self.page_images) == len(self.boxes)
+        # 使用布局引擎处理页面图片和边界框，并更新布局结果
         self.boxes, self.page_layout = self.layouter(
             self.page_images, self.boxes, ZM, drop=drop)
+        # 根据所在页面的累计高度更新每个边界框的顶部和底部位置
+        # 累计Y轴高度
         # cumlative Y
         for i in range(len(self.boxes)):
+            # 将页面的累计高度加到边界框的顶部和底部
             self.boxes[i]["top"] += \
                 self.page_cum_height[self.boxes[i]["page_number"] - 1]
             self.boxes[i]["bottom"] += \
                 self.page_cum_height[self.boxes[i]["page_number"] - 1]
 
     def _text_merge(self):
+        """
+        合并符合条件的文字框以增强文本连贯性。
+
+        此函数首先定义两个辅助函数，用于检查一个文字框是否以特定文本结束或开始。
+        随后遍历文字框列表，寻找应根据其布局特性和位置关系合并的相邻文字框。
+        合并的条件包括相同的布局编号、垂直方向的接近性以及特定的文本关联。
+        合并后更新文字框于原位，并从列表中移除后续文字框。
+        最终，将更新后的文字框列表重新分配给实例变量。
+        """
+
+        # 获取文字框列表以进行后续处理
         # merge adjusted boxes
         bxs = self.boxes
 
         def end_with(b, txt):
+            """
+           判断文字框b的文本是否以指定txt结束。
+
+           :param b: 待检查的文字框。
+           :param txt: 指定的文本。
+           :return: 若b的文本以txt结束则为True，否则为False。
+           """
             txt = txt.strip()
             tt = b.get("text", "").strip()
             return tt and tt.find(txt) == len(tt) - len(txt)
 
         def start_with(b, txts):
+            """
+           判断文字框b的文本是否以txts中的任一文本项开始。
+
+           :param b: 待检查的文字框。
+           :param txts: 指定的文本列表。
+           :return: 若b的文本以txts中的某项开始则为True，否则为False。
+           """
             tt = b.get("text", "").strip()
             return tt and any([tt.find(t.strip()) == 0 for t in txts])
 
-        # horizontally merge adjacent box with the same layout
+        bxs = self.boxes
         i = 0
         while i < len(bxs) - 1:
             b = bxs[i]
             b_ = bxs[i + 1]
+
+            # 若布局编号不同或当前布局类型为特殊类型，则跳过
             if b.get("layoutno", "0") != b_.get("layoutno", "1") or b.get("layout_type", "") in ["table", "figure",
                                                                                                  "equation"]:
                 i += 1
                 continue
-            if abs(self._y_dis(b, b_)
-                   ) < self.mean_height[bxs[i]["page_number"] - 1] / 3:
-                # merge
-                bxs[i]["x1"] = b_["x1"]
-                bxs[i]["top"] = (b["top"] + b_["top"]) / 2
-                bxs[i]["bottom"] = (b["bottom"] + b_["bottom"]) / 2
-                bxs[i]["text"] += b_["text"]
+
+            # 垂直距离足够小则合并
+            if abs(self._y_dis(b, b_)) < self.mean_height[b["page_number"] - 1] / 3:
+                b["x1"] = b_["x1"]
+                b["top"] = (b["top"] + b_["top"]) / 2
+                b["bottom"] = (b["bottom"] + b_["bottom"]) / 2
+                b["text"] += b_["text"]
                 bxs.pop(i + 1)
                 continue
-            i += 1
-            continue
 
-            dis_thr = 1
+            # 判断两个文本框的水平距离
             dis = b["x1"] - b_["x0"]
-            if b.get("layout_type", "") != "text" or b_.get(
-                    "layout_type", "") != "text":
-                if end_with(b, "，") or start_with(b_, "（，"):
+            dis_thr = 1
+            if b.get("layout_type", "") != "text" or b_.get("layout_type", "") != "text":
+                if end_with(b, "，") or start_with(b_, ["（，"]):
                     dis_thr = -8
                 else:
                     i += 1
                     continue
 
-            if abs(self._y_dis(b, b_)) < self.mean_height[bxs[i]["page_number"] - 1] / 5 \
-                    and dis >= dis_thr and b["x1"] < b_["x1"]:
-                # merge
-                bxs[i]["x1"] = b_["x1"]
-                bxs[i]["top"] = (b["top"] + b_["top"]) / 2
-                bxs[i]["bottom"] = (b["bottom"] + b_["bottom"]) / 2
-                bxs[i]["text"] += b_["text"]
+            # 垂直距离与水平距离的综合判断
+            if abs(self._y_dis(b, b_)) < self.mean_height[b["page_number"] - 1] / 5 and dis >= dis_thr and b["x1"] < b_[
+                "x1"]:
+                b["x1"] = b_["x1"]
+                b["top"] = (b["top"] + b_["top"]) / 2
+                b["bottom"] = (b["bottom"] + b_["bottom"]) / 2
+                b["text"] += b_["text"]
                 bxs.pop(i + 1)
                 continue
+
             i += 1
+
         self.boxes = bxs
 
     def _naive_vertical_merge(self):
