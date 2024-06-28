@@ -349,7 +349,6 @@ class RAGFlowPdfParser:
         # 默认情况下，认为对象包含颜色信息
         return True
 
-
     def _table_transformer_job(self, ZM):
         """
         处理表格识别任务。
@@ -430,7 +429,6 @@ class RAGFlowPdfParser:
                     pg.append(it)
             # 将当前页面的所有表格组件添加到全局列表中
             self.tb_cpns.extend(pg)
-
 
         def gather(kwd, fzy=10, ption=0.6):
             """
@@ -692,39 +690,54 @@ class RAGFlowPdfParser:
         self.boxes = bxs
 
     def _naive_vertical_merge(self):
+        """
+        简易垂直合并方法。
+
+        此方法根据文本框的垂直位置和中位高度比对文本框进行排序，以便进行相邻且逻辑相关的文本框合并。
+        通过判断文本框的页码、文本内容、布局特征等条件，避免不合理的合并操作。
+        """
+        # 首先，依据Y轴位置及中位高度的一定比例对所有文本框进行排序
         bxs = Recognizer.sort_Y_firstly(
             self.boxes, np.median(
                 self.mean_height) / 3)
         i = 0
         while i + 1 < len(bxs):
-            b = bxs[i]
-            b_ = bxs[i + 1]
+            b, b_ = bxs[i], bxs[i + 1]  # 当前及下一个文本框
+
+            # 若下一个文本框页码更大且当前框内容为数字或项目符号，不合并并移除当前框
             if b["page_number"] < b_["page_number"] and re.match(
                     r"[0-9  •一—-]+$", b["text"]):
                 bxs.pop(i)
                 continue
+
+            # 若当前框为空，不合并并移除
             if not b["text"].strip():
                 bxs.pop(i)
                 continue
+
+            # 判断是否应连接两个文本框的特征（如标点结尾）
             concatting_feats = [
                 b["text"].strip()[-1] in ",;:'\"，、‘“；：-",
-                len(b["text"].strip()) > 1 and b["text"].strip(
-                )[-2] in ",;:'\"，‘“、；：",
-                b_["text"].strip() and b_["text"].strip()[0] in "。；？！?”）),，、：",
+                len(b["text"].strip()) > 1 and b["text"].strip()[-2] in ",;:'\"，‘“、；：",
+                b_["text"].strip() and b_["text"].strip()[0] in "。；？！？”）),，、：",
             ]
-            # features for not concating
+
+            # 判断不应连接的特征（如不同区块、句号结尾等）
             feats = [
                 b.get("layoutno", 0) != b_.get("layoutno", 0),
                 b["text"].strip()[-1] in "。？！?",
                 self.is_english and b["text"].strip()[-1] in ".!?",
-                b["page_number"] == b_["page_number"] and b_["top"] -
-                b["bottom"] > self.mean_height[b["page_number"] - 1] * 1.5,
-                b["page_number"] < b_["page_number"] and abs(
-                    b["x0"] - b_["x0"]) > self.mean_width[b["page_number"] - 1] * 4,
+                # 同一页且间距过大不合并
+                b["page_number"] == b_["page_number"] and b_["top"] - b["bottom"] > self.mean_height[b["page_number"] - 1] * 1.5,
+                # 不同页且横向距离过大不合并
+                b["page_number"] < b_["page_number"] and abs(b["x0"] - b_["x0"]) > self.mean_width[b["page_number"] - 1] * 4,
             ]
-            # split features
+
+            # 判断是否因位置原因分离文本框（如左右交错）
             detach_feats = [b["x1"] < b_["x0"],
                             b["x0"] > b_["x1"]]
+
+            # 根据上述特征决定是否跳过当前框进行下一轮循环
             if (any(feats) and not any(concatting_feats)) or any(detach_feats):
                 print(
                     b["text"],
@@ -734,29 +747,49 @@ class RAGFlowPdfParser:
                     any(detach_feats))
                 i += 1
                 continue
-            # merge up and down
+
+            # 执行合并操作：更新底部边界、拼接文本、调整边界范围
             b["bottom"] = b_["bottom"]
             b["text"] += b_["text"]
             b["x0"] = min(b["x0"], b_["x0"])
             b["x1"] = max(b["x1"], b_["x1"])
+            # 合并后移除已合并的下一个文本框
             bxs.pop(i + 1)
+        # 更新类的文本框列表
         self.boxes = bxs
 
     def _concat_downward(self, concat_between_pages=True):
+        """
+        向下合并文本框。
+
+        参数:
+        concat_between_pages: 布尔值，控制是否在不同页面的文本框之间进行合并。
+        """
+        # 遍历每个文本框，计算其是否与其他文本框在同一行
+        # 计算每个文本框所在行的元素数量
         # count boxes in the same row as a feature
         for i in range(len(self.boxes)):
+            # 获取当前文本框所在页面的平均高度
             mh = self.mean_height[self.boxes[i]["page_number"] - 1]
+            # 初始化当前文本框的“在行中”计数为0
             self.boxes[i]["in_row"] = 0
+            # 确定搜索窗口的起始位置，最多向前搜索12个文本框
             j = max(0, i - 12)
+            # 搜索窗口的结束位置，最多向后搜索12个文本框
             while j < min(i + 12, len(self.boxes)):
+                # 跳过当前文本框自身
                 if j == i:
                     j += 1
                     continue
+                # 计算当前文本框与搜索窗口中的其他文本框的垂直距离，并除以平均高度
                 ydis = self._y_dis(self.boxes[i], self.boxes[j]) / mh
+                # 如果垂直距离小于1，则认为两个文本框在同一行
                 if abs(ydis) < 1:
                     self.boxes[i]["in_row"] += 1
+                # 如果垂直距离大于0，且搜索方向向上，则跳出循环，不再向更早的文本框搜索
                 elif ydis > 0:
                     break
+                # 继续搜索下一个文本框
                 j += 1
 
         # concat between rows
@@ -766,110 +799,145 @@ class RAGFlowPdfParser:
             chunks = []
 
             def dfs(up, dp):
+                """
+                深度优先搜索函数，用于寻找文本块之间的组合关系。
+
+                :param up: 当前正在处理的文本块
+                :param dp: 当前文本块的起始索引
+                """
+                # 将当前文本块加入到组合序列中
                 chunks.append(up)
                 i = dp
+                # 遍历后续文本块，直到遇到不满足组合条件的块
                 while i < min(dp + 12, len(boxes)):
+                    # 计算当前块与后续块的垂直距离
                     ydis = self._y_dis(up, boxes[i])
+                    # 判断是否在同一页面
                     smpg = up["page_number"] == boxes[i]["page_number"]
+                    # 获取当前页面的平均高度和宽度
                     mh = self.mean_height[up["page_number"] - 1]
                     mw = self.mean_width[up["page_number"] - 1]
+                    # 根据页面内或跨页的条件判断是否中断搜索
                     if smpg and ydis > mh * 4:
                         break
                     if not smpg and ydis > mh * 16:
                         break
                     down = boxes[i]
+                    # 跨页且不允许跨页组合时中断搜索
                     if not concat_between_pages and down["page_number"] > up["page_number"]:
                         break
-
-                    if up.get("R", "") != down.get(
-                            "R", "") and up["text"][-1] != "，":
+                    # 判断当前块和后续块的行号是否相同，以及是否以逗号结尾
+                    if up.get("R", "") != down.get("R", "") and up["text"][-1] != "，":
                         i += 1
                         continue
-
+                    # 判断当前块和后续块是否包含特定的日期格式，或后续块是否为空
                     if re.match(r"[0-9]{2,3}/[0-9]{3}$", up["text"]) \
                             or re.match(r"[0-9]{2,3}/[0-9]{3}$", down["text"]) \
                             or not down["text"].strip():
                         i += 1
                         continue
-
-                    if not down["text"].strip():
+                    # 判断当前块和后续块是否在页面上的位置过于分离
+                    if up["x1"] < down["x0"] - 10 * mw or up["x0"] > down["x1"] + 10 * mw:
                         i += 1
                         continue
-
-                    if up["x1"] < down["x0"] - 10 * \
-                            mw or up["x0"] > down["x1"] + 10 * mw:
-                        i += 1
-                        continue
-
+                    # 如果当前块是文本类型，且组合数量小于5，进一步判断布局编号是否相同
                     if i - dp < 5 and up.get("layout_type") == "text":
-                        if up.get("layoutno", "1") == down.get(
-                                "layoutno", "2"):
+                        if up.get("layoutno", "1") == down.get("layoutno", "2"):
                             dfs(down, i + 1)
                             boxes.pop(i)
                             return
                         i += 1
                         continue
-
+                    # 使用机器学习模型预测当前块和后续块是否应该组合
                     fea = self._updown_concat_features(up, down)
-                    if self.updown_cnt_mdl.predict(
-                            xgb.DMatrix([fea]))[0] <= 0.5:
+                    if self.updown_cnt_mdl.predict(xgb.DMatrix([fea]))[0] <= 0.5:
                         i += 1
                         continue
                     dfs(down, i + 1)
                     boxes.pop(i)
                     return
 
+            # 开始深度优先搜索
             dfs(boxes[0], 1)
+            # 移除已处理的盒子
             boxes.pop(0)
+            # 如果当前存在块，则添加到块列表中
             if chunks:
                 blocks.append(chunks)
 
         # concat within each block
+        # 初始化一个空列表，用于存储合并后的文本框信息
         boxes = []
+        # 遍历每个文本块
         for b in blocks:
+            # 如果文本块只有一个元素，直接添加到boxes列表中
             if len(b) == 1:
                 boxes.append(b[0])
                 continue
+            # 选取第一个文本框作为合并的基础
             t = b[0]
+            # 遍历除第一个文本框外的其他文本框
             for c in b[1:]:
+                # 去除文本两端的空格
                 t["text"] = t["text"].strip()
                 c["text"] = c["text"].strip()
+                # 如果当前文本框的文本为空，则跳过
                 if not c["text"]:
                     continue
+                # 如果当前文本框和前一个文本框的最后一个字符可以组成单词，则添加空格
                 if t["text"] and re.match(
                         r"[0-9\.a-zA-Z]+$", t["text"][-1] + c["text"][-1]):
                     t["text"] += " "
+                # 合并文本
                 t["text"] += c["text"]
+                # 更新文本框的左上角坐标
                 t["x0"] = min(t["x0"], c["x0"])
+                # 更新文本框的右下角坐标
                 t["x1"] = max(t["x1"], c["x1"])
+                # 更新文本框所在的页面号
                 t["page_number"] = min(t["page_number"], c["page_number"])
+                # 更新文本框的底部位置
                 t["bottom"] = c["bottom"]
+                # 如果当前文本框没有布局类型，而后续文本框有，则采用后续文本框的布局类型
                 if not t["layout_type"] \
                         and c["layout_type"]:
                     t["layout_type"] = c["layout_type"]
+            # 将合并后的文本框添加到boxes列表中
             boxes.append(t)
-
+        # 对boxes列表进行排序，以y坐标为首要排序条件
         self.boxes = Recognizer.sort_Y_firstly(boxes, 0)
 
     def _filter_forpages(self):
+        """
+        过滤页面中的无关盒子，旨在保留与页面内容相关的盒子。
+        通过检查盒子中的文本内容，移除不符合条件的盒子，如目录、致谢等。
+        同时，移除与页面内容无关或不重要的盒子，以精简页面内容。
+        """
+        # 如果boxes为空，则无需进行过滤，直接返回
         if not self.boxes:
             return
         findit = False
         i = 0
+        # 遍历boxes中的每个盒子
         while i < len(self.boxes):
+            # 检查当前盒子的文本是否为目录、致谢等非页面内容，如果是，则继续检查
             if not re.match(r"(contents|目录|目次|table of contents|致谢|acknowledge)$",
                             re.sub(r"( | |\u3000)+", "", self.boxes[i]["text"].lower())):
                 i += 1
                 continue
             findit = True
+            # 尝试匹配英文内容，如果当前盒子包含足够的英文信息，则移除该盒子
             eng = re.match(
                 r"[0-9a-zA-Z :'.-]{5,}",
                 self.boxes[i]["text"].strip())
             self.boxes.pop(i)
+            # 如果当前盒子被移除后，索引超出范围，则结束循环
             if i >= len(self.boxes):
                 break
+            # 获取当前盒子的前缀，用于后续的匹配
             prefix = self.boxes[i]["text"].strip()[:3] if not eng else " ".join(
                 self.boxes[i]["text"].strip().split(" ")[:2])
+            # 如果当前盒子的前缀为空，则移除该盒子，并尝试获取下一个盒子的前缀
             while not prefix:
                 self.boxes.pop(i)
                 if i >= len(self.boxes):
@@ -877,88 +945,140 @@ class RAGFlowPdfParser:
                 prefix = self.boxes[i]["text"].strip()[:3] if not eng else " ".join(
                     self.boxes[i]["text"].strip().split(" ")[:2])
             self.boxes.pop(i)
+            # 如果当前盒子被移除后，索引超出范围，或前缀为空，则结束循环
             if i >= len(self.boxes) or not prefix:
                 break
+            # 尝试向前匹配与当前前缀相符的盒子，最多匹配128个
             for j in range(i, min(i + 128, len(self.boxes))):
                 if not re.match(prefix, self.boxes[j]["text"]):
                     continue
+                # 如果找到匹配的盒子，则移除当前盒子到匹配盒子之间的所有盒子，并结束循环
                 for k in range(i, j):
                     self.boxes.pop(i)
                 break
+        # 如果找到了需要处理的盒子，则结束函数
         if findit:
             return
-
+        # 初始化一个与页面数量相同的列表，用于标记每个页面是否被修改（脏页）
         page_dirty = [0] * len(self.page_images)
+
+        # 遍历所有文本框（boxes），检查是否存在特定模式的文本
         for b in self.boxes:
+            # 使用正则表达式检查文本中是否包含特定模式，如“···”
             if re.search(r"(··|··|··)", b["text"]):
+                # 如果存在，增加相应页面的脏页计数
                 page_dirty[b["page_number"] - 1] += 1
+
+        # 筛选出脏页，只保留计数大于3的页面编号
         page_dirty = set([i + 1 for i, t in enumerate(page_dirty) if t > 3])
+
+        # 如果没有脏页，直接返回，不进行后续处理
         if not page_dirty:
             return
+
+        # 遍历所有文本框，移除位于脏页上的文本框
         i = 0
         while i < len(self.boxes):
+            # 如果当前文本框所在的页面是脏页，移除该文本框
             if self.boxes[i]["page_number"] in page_dirty:
                 self.boxes.pop(i)
+                # 由于列表长度减小，需要调整遍历的索引
                 continue
             i += 1
 
     def _merge_with_same_bullet(self):
+        """
+        合并文本框中相同符号前的文本。
+
+        该方法遍历文本框列表，检查相邻的文本框是否可以合并。如果两个文本框的符号相同且位置相邻，
+        它们将被合并为一个文本框。这个过程有助于整理文档中的列表或项目符号文本。
+        """
+        # 初始化索引i，用于遍历文本框列表
         i = 0
+
+        # 遍历文本框列表，直到倒数第二个文本框，因为我们在比较当前文本框和下一个文本框
         while i + 1 < len(self.boxes):
+            # 获取当前文本框
             b = self.boxes[i]
+            # 获取下一个文本框
             b_ = self.boxes[i + 1]
+
+            # 如果当前文本框的文本为空，则移除该文本框并继续下一次循环
             if not b["text"].strip():
                 self.boxes.pop(i)
                 continue
+            # 如果下一个文本框的文本为空，则移除该文本框并继续下一次循环
             if not b_["text"].strip():
                 self.boxes.pop(i + 1)
                 continue
 
+            # 如果当前文本框和下一个文本框的首字符不同，或者首字符是英文或中文，或者当前文本框的顶部位置高于下一个文本框的底部位置，则继续下一次循环
             if b["text"].strip()[0] != b_["text"].strip()[0] \
                     or b["text"].strip()[0].lower() in set("qwertyuopasdfghjklzxcvbnm") \
                     or rag_tokenizer.is_chinese(b["text"].strip()[0]) \
                     or b["top"] > b_["bottom"]:
                 i += 1
                 continue
+
+            # 如果当前文本框和下一个文本框可以合并，则合并文本，并更新合并后文本框的位置信息
             b_["text"] = b["text"] + "\n" + b_["text"]
             b_["x0"] = min(b["x0"], b_["x0"])
             b_["x1"] = max(b["x1"], b_["x1"])
             b_["top"] = b["top"]
+            # 移除当前文本框，因为已经合并到下一个文本框中
             self.boxes.pop(i)
 
     def _extract_table_figure(self, need_image, ZM,
                               return_html, need_position):
+        """
+            提取文档中的表格和图片信息。
+
+            :param need_image: 布尔值，指示是否需要提取图片
+            :param ZM: float值，用于图片裁剪的放大倍数
+            :param return_html: 布尔值，指示是否以HTML格式返回表格
+            :param need_position: 布尔值，指示是否返回元素的位置信息
+            :return: 如果need_position为True，返回元素的列表和位置信息的列表；否则，只返回元素的列表。
+            """
+        # 初始化表格和图片的字典
         tables = {}
         figures = {}
+        # 遍历boxes，提取表格和图片信息
         # extract figure and table boxes
         i = 0
         lst_lout_no = ""
         nomerge_lout_no = []
         while i < len(self.boxes):
+            # 跳过没有layoutno的box
             if "layoutno" not in self.boxes[i]:
                 i += 1
                 continue
-            lout_no = str(self.boxes[i]["page_number"]) + \
-                      "-" + str(self.boxes[i]["layoutno"])
+            # 构建layout编号
+            lout_no = str(self.boxes[i]["page_number"]) + "-" + str(self.boxes[i]["layoutno"])
+            # 将不合并的layout编号添加到列表
             if TableStructureRecognizer.is_caption(self.boxes[i]) or self.boxes[i]["layout_type"] in ["table caption",
                                                                                                       "title",
                                                                                                       "figure caption",
                                                                                                       "reference"]:
                 nomerge_lout_no.append(lst_lout_no)
+            # 处理表格box
             if self.boxes[i]["layout_type"] == "table":
                 if re.match(r"(数据|资料|图表)*来源[:： ]", self.boxes[i]["text"]):
                     self.boxes.pop(i)
                     continue
+                # 添加到表格字典
                 if lout_no not in tables:
                     tables[lout_no] = []
                 tables[lout_no].append(self.boxes[i])
                 self.boxes.pop(i)
                 lst_lout_no = lout_no
                 continue
+            # 处理图片box
             if need_image and self.boxes[i]["layout_type"] == "figure":
+                # 排除包含“来源”字样的box
                 if re.match(r"(数据|资料|图表)*来源[:： ]", self.boxes[i]["text"]):
                     self.boxes.pop(i)
                     continue
+                # 添加到图片字典
                 if lout_no not in figures:
                     figures[lout_no] = []
                 figures[lout_no].append(self.boxes[i])
@@ -967,6 +1087,7 @@ class RAGFlowPdfParser:
                 continue
             i += 1
 
+        # 合并跨页的表格
         # merge table on different pages
         nomerge_lout_no = set(nomerge_lout_no)
         tbls = sorted([(k, bxs) for k, bxs in tables.items()],
@@ -977,107 +1098,142 @@ class RAGFlowPdfParser:
             k0, bxs0 = tbls[i - 1]
             k, bxs = tbls[i]
             i -= 1
+            # 跳过不允许合并的layout编号
             if k0 in nomerge_lout_no:
                 continue
+            # 同页的表格不合并
             if bxs[0]["page_number"] == bxs0[0]["page_number"]:
                 continue
+            # 跨页距离过大时不合并
             if bxs[0]["page_number"] - bxs0[0]["page_number"] > 1:
                 continue
             mh = self.mean_height[bxs[0]["page_number"] - 1]
+            # 表格之间高度差距过大时不合并
             if self._y_dis(bxs0[-1], bxs[0]) > mh * 23:
                 continue
             tables[k0].extend(tables[k])
             del tables[k]
 
         def x_overlapped(a, b):
+            """
+            检查两个box是否在水平方向上有重叠。
+
+            :param a: Box A的字典表示
+            :param b: Box B的字典表示
+            :return: 布尔值，表示是否有重叠
+            """
             return not any([a["x1"] < b["x0"], a["x0"] > b["x1"]])
 
-        # find captions and pop out
+        # 初始化索引i以遍历盒子列表
+        # 查找并移除标题
         i = 0
         while i < len(self.boxes):
             c = self.boxes[i]
-            # mh = self.mean_height[c["page_number"]-1]
+            # 判断当前框是否为标题，如果不是则跳过
             if not TableStructureRecognizer.is_caption(c):
                 i += 1
                 continue
 
-            # find the nearest layouts
+            # 定义寻找最近布局的辅助函数
             def nearest(tbls):
                 nonlocal c
-                mink = ""
-                minv = 1000000000
+                mink = ""  # 初始化最近表格的键
+                minv = 1000000000  # 初始化最小距离为一个大数
                 for k, bxs in tbls.items():
                     for b in bxs:
+                        # 跳过已经是标题的布局
                         if b.get("layout_type", "").find("caption") >= 0:
                             continue
+                        # 计算与当前标题框的垂直和水平距离
                         y_dis = self._y_dis(c, b)
-                        x_dis = self._x_dis(
-                            c, b) if not x_overlapped(
-                            c, b) else 0
+                        x_dis = self._x_dis(c, b) if not x_overlapped(c, b) else 0
                         dis = y_dis * y_dis + x_dis * x_dis
+                        # 更新最近的表格或图片键及距离
                         if dis < minv:
                             mink = k
                             minv = dis
                 return mink, minv
 
+            # 找到最近的表格和图片
             tk, tv = nearest(tables)
             fk, fv = nearest(figures)
+            # 注释掉了基于距离阈值的判断逻辑，直接处理标题归属
             # if min(tv, fv) > 2000:
             #    i += 1
             #    continue
+
+            # 根据距离判断将标题分配给最近的表格或图片，并记录日志
             if tv < fv and tk:
                 tables[tk].insert(0, c)
-                logging.debug(
-                    "TABLE:" +
-                    self.boxes[i]["text"] +
-                    "; Cap: " +
-                    tk)
+                logging.debug(f"TABLE:{self.boxes[i]['text']}; Cap: {tk}")
             elif fk:
                 figures[fk].insert(0, c)
-                logging.debug(
-                    "FIGURE:" +
-                    self.boxes[i]["text"] +
-                    "; Cap: " +
-                    tk)
+                logging.debug(f"FIGURE:{self.boxes[i]['text']}; Cap: {fk}")
+            # 从原始列表中移除已处理的标题框
             self.boxes.pop(i)
 
+        # 初始化结果列表和位置列表，准备存储处理后的信息
         res = []
         positions = []
 
         def cropout(bxs, ltype, poss):
+            """
+            根据给定的边界框和布局类型，从页面中裁剪出对应的图像区域。
+
+            参数:
+            bxs: 一个列表，包含每个边界框的信息，每个边界框是一个字典。
+            ltype: 字符串，表示所需的布局类型。
+            poss: 一个列表，用于存储裁剪出的图像的页面号和坐标信息。
+
+            返回:
+            裁剪出的图像或组合图像对象。
+            """
             nonlocal ZM
+            # 获取所有边界框所在页面的页码集合
             pn = set([b["page_number"] - 1 for b in bxs])
+            # 如果只有一页，处理单页情况
             if len(pn) < 2:
                 pn = list(pn)[0]
                 ht = self.page_cum_height[pn]
+                # 计算边界框的最小和最大坐标值
                 b = {
                     "x0": np.min([b["x0"] for b in bxs]),
                     "top": np.min([b["top"] for b in bxs]) - ht,
                     "x1": np.max([b["x1"] for b in bxs]),
                     "bottom": np.max([b["bottom"] for b in bxs]) - ht
                 }
+                # 筛选出指定类型布局的信息
                 louts = [l for l in self.page_layout[pn] if l["type"] == ltype]
+                # 查找与边界框重叠的布局信息
                 ii = Recognizer.find_overlapped(b, louts, naive=True)
                 if ii is not None:
                     b = louts[ii]
                 else:
+                    # 如果没有找到匹配的布局，记录警告
                     logging.warn(
                         f"Missing layout match: {pn + 1},%s" %
                         (bxs[0].get(
                             "layoutno", "")))
-
+                # 计算裁剪区域的坐标，并根据需要调整右侧坐标
                 left, top, right, bott = b["x0"], b["top"], b["x1"], b["bottom"]
                 if right < left: right = left + 1
+                # 更新poss列表，并返回裁剪出的图像
                 poss.append((pn + self.page_from, left, right, top, bott))
                 return self.page_images[pn] \
                     .crop((left * ZM, top * ZM,
                            right * ZM, bott * ZM))
+                # 根据页面整合图片并返回最终图像
+
             pn = {}
+        # 遍历区块列表，按页码分组
             for b in bxs:
                 p = b["page_number"] - 1
+                # 若该页码不在字典中，则创建空列表
                 if p not in pn:
                     pn[p] = []
+                # 将当前区块添加到对应页码的列表中
                 pn[p].append(b)
+            # 对字典按页码排序
             pn = sorted(pn.items(), key=lambda x: x[0])
             imgs = [cropout(arr, ltype, poss) for p, arr in pn]
             pic = Image.new("RGB",
@@ -1088,43 +1244,62 @@ class RAGFlowPdfParser:
             for img in imgs:
                 pic.paste(img, (0, int(height)))
                 height += img.size[1]
+
+            # 返回合并后的图片
             return pic
 
-        # crop figure out and add caption
+    # 裁剪图例并添加说明文字
         for k, bxs in figures.items():
             txt = "\n".join([b["text"] for b in bxs])
+            # 如果没有文字说明则跳过
             if not txt:
                 continue
 
-            poss = []
-            res.append(
-                (cropout(
-                    bxs,
-                    "figure", poss),
-                 [txt]))
+            poss = []  # 初始化位置列表
+            # 裁剪图例区域，添加文本说明，更新位置列表，并将结果加入res
+            res.append((cropout(bxs, "figure", poss), [txt]))
             positions.append(poss)
 
+    # 对于表格处理
         for k, bxs in tables.items():
+            # 如果区块列表为空，则跳过
             if not bxs:
                 continue
-            bxs = Recognizer.sort_Y_firstly(bxs, np.mean(
-                [(b["bottom"] - b["top"]) / 2 for b in bxs]))
-            poss = []
-            res.append((cropout(bxs, "table", poss),
-                        self.tbl_det.construct_table(bxs, html=return_html, is_english=self.is_english)))
+            # 按Y轴排序区块
+            bxs = Recognizer.sort_Y_firstly(bxs, np.mean([(b["bottom"] - b["top"]) / 2 for b in bxs]))
+            poss = []  # 初始化位置列表
+            # 裁剪表格区域，构建表格内容，更新位置列表，并将结果加入res
+            res.append((cropout(bxs, "table", poss), self.tbl_det.construct_table(bxs, html=return_html, is_english=self.is_english)))
             positions.append(poss)
 
+        # 断言确保位置列表和结果列表长度一致
         assert len(positions) == len(res)
 
+        # 根据需求返回结果和位置信息或仅结果
         if need_position:
             return list(zip(res, positions))
         return res
 
     def proj_match(self, line):
+        """
+        判断给定的行是否符合特定的项目匹配规则。
+
+        该函数通过一系列正则表达式匹配来判断行是否包含章节、条目、编号等特定格式的信息。
+        如果行符合任一规则，则返回对应的匹配值；如果行为空或仅包含数字和符号，则不匹配并返回False。
+
+        参数:
+        line (str): 需要进行匹配的字符串行。
+
+        返回:
+        int 或 None: 如果行匹配任一规则，则返回对应的规则编号；否则返回None。
+        """
+        # 如果行长度小于等于2，则不进行后续匹配
         if len(line) <= 2:
             return
+        # 如果行仅包含数字、括号、点、逗号、百分号等字符，则不匹配
         if re.match(r"[0-9 ().,%%+/-]+$", line):
             return False
+        # 遍历预定义的规则列表，尝试匹配每一项
         for p, j in [
             (r"第[零一二三四五六七八九十百]+章", 1),
             (r"第[零一二三四五六七八九十百]+[条节]", 2),
@@ -1140,22 +1315,41 @@ class RAGFlowPdfParser:
             (r"[零一二三四五六七八九十百]+是", 12),
             (r"[⚫•➢✓]", 12)
         ]:
+            # 如果当前行匹配了某个规则，则返回对应的规则编号
             if re.match(p, line):
                 return j
+        # 如果没有匹配任何规则，则返回None
         return
 
     def _line_tag(self, bx, ZM):
+        """
+        为文本行生成标签，描述文本行在页面中的位置。
+
+        参数:
+        bx: 字典，包含文本行的相关信息，如页码、顶部和底部位置等。
+        ZM: float，缩放因子，用于调整位置计算。
+
+        返回:
+        字符串，表示文本行的标签，如果无法生成有效标签，则返回空字符串。
+        """
+        # 初始化包含页码的列表
         pn = [bx["page_number"]]
+        # 计算文本行顶部相对于页面顶部的位置
         top = bx["top"] - self.page_cum_height[pn[0] - 1]
+        # 计算文本行底部相对于页面顶部的位置
         bott = bx["bottom"] - self.page_cum_height[pn[0] - 1]
+        # 获取页面图像的数量
         page_images_cnt = len(self.page_images)
+        # 如果当前页码超出页面图像的数量，直接返回空字符串
         if pn[-1] - 1 >= page_images_cnt: return ""
+        # 当文本行底部位置超出当前页面图像的底部时，向下滚动到下一页
         while bott * ZM > self.page_images[pn[-1] - 1].size[1]:
             bott -= self.page_images[pn[-1] - 1].size[1] / ZM
             pn.append(pn[-1] + 1)
+            # 如果滚动到超出页面图像的数量，直接返回空字符串
             if pn[-1] - 1 >= page_images_cnt:
                 return ""
-
+        # 根据页码、文本行的左右位置和顶部、底部位置生成标签字符串
         return "@@{}\t{:.1f}\t{:.1f}\t{:.1f}\t{:.1f}##" \
             .format("-".join([str(p) for p in pn]),
                     bx["x0"], bx["x1"], top, bott)
@@ -1443,37 +1637,89 @@ class RAGFlowPdfParser:
 
 class PlainParser(object):
     def __call__(self, filename, from_page=0, to_page=100000, **kwargs):
+        """
+        将实例作为函数调用，用于提取PDF文件中的文本和大纲。
+
+        参数:
+        filename: PDF文件名或文件对象，用于读取PDF内容。
+        from_page: 开始提取文本的页面索引。
+        to_page: 结束提取文本的页面索引。
+        **kwargs: 其他关键字参数，用于未来扩展。
+
+        返回:
+        一个包含文本行和大纲的元组。文本行以列表形式返回，大纲以空列表形式返回（如果未提取到大纲）。
+        """
+        # 初始化大纲列表
         self.outlines = []
+        # 初始化存储文本行的列表
         lines = []
         try:
+            # 打开PDF文件，支持传入文件名或字节流
             self.pdf = pdf2_read(
                 filename if isinstance(
                     filename, str) else BytesIO(filename))
+            # 提取指定页面范围内的文本
             for page in self.pdf.pages[from_page:to_page]:
+                # 将每页的文本行添加到lines列表中
                 lines.extend([t for t in page.extract_text().split("\n")])
 
+            # 提取PDF文件的大纲
             outlines = self.pdf.outline
 
+            # 定义深度优先搜索函数，用于递归提取大纲标题和深度
             def dfs(arr, depth):
                 for a in arr:
                     if isinstance(a, dict):
+                        # 如果是大纲项，添加到outlines列表中
                         self.outlines.append((a["/Title"], depth))
                         continue
+                    # 递归处理子大纲项
                     dfs(a, depth + 1)
 
+            # 从根大纲项开始递归提取大纲
             dfs(outlines, 0)
         except Exception as e:
+            # 记录提取过程中可能出现的异常
             logging.warning(f"Outlines exception: {e}")
         if not self.outlines:
+            # 如果未提取到大纲，记录警告信息
             logging.warning(f"Miss outlines")
 
+        # 返回文本行和空的大纲列表
         return [(l, "") for l in lines], []
 
     def crop(self, ck, need_position):
+        """
+        根据提供的切片信息和需求，裁剪图像。
+
+        此方法是一个抽象方法，需要在子类中实现具体的裁剪逻辑。
+        裁剪操作基于给定的切片键(ck)和是否需要定位信息(need_position)来执行。
+
+        参数:
+            ck (str): 切片键，用于指定裁剪的特定区域。
+            need_position (bool): 指示是否需要返回裁剪区域的位置信息。
+
+        抛出:
+            NotImplementedError: 由于此方法是一个抽象方法，未在当前类中实现，因此总是抛出此异常。
+        """
         raise NotImplementedError
 
     @staticmethod
     def remove_tag(txt):
+        """
+        静态方法：移除文本中的标签
+        该方法旨在从给定的文本中移除HTML或XML标签，以获得纯文本内容。
+        由于方法体未实现，因此目前会抛出NotImplementedError异常。
+
+        参数:
+        txt (str): 包含HTML或XML标签的文本字符串
+
+        返回:
+        str: 移除标签后的纯文本字符串
+
+        注意:
+        该方法需要实现具体的标签移除逻辑。
+        """
         raise NotImplementedError
 
 
