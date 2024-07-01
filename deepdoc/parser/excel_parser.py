@@ -164,4 +164,3 @@ if __name__ == "__main__":
     psr = RAGFlowExcelParser()
     # 调用对象的解析方法，传入命令行参数中的第一个参数作为文件路径
     psr(sys.argv[1])
-
