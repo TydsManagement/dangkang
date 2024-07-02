@@ -177,7 +177,7 @@ class RAGFlowDocxParser:
         # 否则，将行列表中的所有字符串用换行符连接成一个大字符串后返回
         return ["\n".join(lines)]
 
-        def __call__(self, fnm, from_page=0, to_page=100000):
+    def __call__(self, fnm, from_page=0, to_page=100000):
         """
         使类实例可调用，用于从指定页码范围内的文档中解析内容。
 
