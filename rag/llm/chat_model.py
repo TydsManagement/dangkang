@@ -287,41 +287,94 @@ class ZhipuChat(Base):
 
 class OllamaChat(Base):
     def __init__(self, key, model_name, **kwargs):
+        """
+        初始化模型客户端。
+
+        参数:
+        - key: API密钥。
+        - model_name: 模型名称。
+        - **kwargs: 额外的参数，其中应包含基础URL（base_url）。
+        """
+        # 初始化客户端，使用kwargs中的base_url配置
         self.client = Client(host=kwargs["base_url"])
+        # 存储模型名称
         self.model_name = model_name
 
     def chat(self, system, history, gen_conf):
+        """
+        与聊天机器人进行对话。
+
+        参数:
+        system (str): 系统消息，用于指示或影响机器人的响应。
+        history (List[Dict]): 对话历史，包含之前的对话内容和角色。
+        gen_conf (Dict): 生成配置，用于定制机器人的响应生成方式。
+
+        返回:
+        tuple: 包含机器人的响应和评价次数的元组。
+        """
+        # 如果有系统消息，将其添加到对话历史的开头
         if system:
             history.insert(0, {"role": "system", "content": system})
+
         try:
+            # 初始化选项字典，用于传递给聊天函数
             options = {}
+
+            # 根据生成配置，动态添加选项到options字典
             if "temperature" in gen_conf: options["temperature"] = gen_conf["temperature"]
             if "max_tokens" in gen_conf: options["num_predict"] = gen_conf["max_tokens"]
             if "top_p" in gen_conf: options["top_k"] = gen_conf["top_p"]
             if "presence_penalty" in gen_conf: options["presence_penalty"] = gen_conf["presence_penalty"]
             if "frequency_penalty" in gen_conf: options["frequency_penalty"] = gen_conf["frequency_penalty"]
+
+            # 调用客户端的chat方法进行对话，并获取响应
             response = self.client.chat(
                 model=self.model_name,
                 messages=history,
                 options=options,
                 keep_alive=-1
             )
+
+            # 从响应中提取答案和评价次数
             ans = response["message"]["content"].strip()
-            return ans, response["eval_count"] + response.get("prompt_eval_count", 0)
+            eval_count = response["eval_count"] + response.get("prompt_eval_count", 0)
+
+            return ans, eval_count
         except Exception as e:
+            # 如果发生异常，返回错误消息和0的评价次数
             return "**ERROR**: " + str(e), 0
 
     def chat_streamly(self, system, history, gen_conf):
+        """
+        通过流式调用模型进行对话。
+
+        参数:
+        system (str): 系统消息，用于初始化对话。
+        history (List[Dict]): 对话历史，包含之前的对话内容。
+        gen_conf (Dict): 生成配置，用于定制生成的回答。
+
+        返回:
+        Generator: 生成器，产生对话过程中的中间结果和最终结果。
+        """
+        # 如果有系统消息，插入到对话历史的开头
         if system:
             history.insert(0, {"role": "system", "content": system})
+
+        # 初始化生成选项
         options = {}
+
+        # 根据生成配置，动态设置生成选项
         if "temperature" in gen_conf: options["temperature"] = gen_conf["temperature"]
         if "max_tokens" in gen_conf: options["num_predict"] = gen_conf["max_tokens"]
         if "top_p" in gen_conf: options["top_k"] = gen_conf["top_p"]
         if "presence_penalty" in gen_conf: options["presence_penalty"] = gen_conf["presence_penalty"]
         if "frequency_penalty" in gen_conf: options["frequency_penalty"] = gen_conf["frequency_penalty"]
+
+        # 初始化答案字符串
         ans = ""
+
         try:
+            # 调用客户端的chat方法进行流式对话
             response = self.client.chat(
                 model=self.model_name,
                 messages=history,
@@ -329,14 +382,21 @@ class OllamaChat(Base):
                 options=options,
                 keep_alive=-1
             )
+            # 遍历对话响应
             for resp in response:
+                # 如果当前响应表示对话结束，yield累计的评价指标
                 if resp["done"]:
                     yield resp.get("prompt_eval_count", 0) + resp.get("eval_count", 0)
+                # 将当前响应的消息内容追加到答案字符串
                 ans += resp["message"]["content"]
+                # 将当前答案yield出去
                 yield ans
         except Exception as e:
+            # 如果发生异常，将当前答案和错误信息yield出去
             yield ans + "\n**ERROR**: " + str(e)
-        yield 0
+        finally:
+            # 对话结束，yield 0表示完成
+            yield 0
 
 
 class LocalLLM(Base):
