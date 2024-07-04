@@ -56,7 +56,6 @@ Jinja2==3.1.4
 joblib==1.4.2
 jsonschema==4.22.0
 jsonschema-specifications==2023.12.1
-lightgbm @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_11bsjesvl3/croot/lightgbm_1714113233056/work
 llama-cloud==0.0.6
 llama-index-core==0.10.51
 llama-index-postprocessor-jinaai-rerank==0.1.6
@@ -71,7 +70,6 @@ mypy-extensions==1.0.0
 nest-asyncio==1.6.0
 networkx==3.3
 nltk==3.8.1
-numpy @ file:///private/var/folders/c_/qfmhj66j0tn016nkx_th4hxm0000gp/T/abs_b7iptlxgej/croot/numpy_and_numpy_base_1708638622773/work/dist/numpy-1.26.4-cp311-cp311-macosx_10_9_x86_64.whl#sha256=ca93246020dd5cf5864c57fea8d3b0afd6530b245222908737c7f434a105fdc2
 nvidia-pyindex==1.0.9
 ollama==0.2.1
 onnxruntime==1.16.3
@@ -113,7 +111,6 @@ ruamel.yaml==0.18.6
 ruamel.yaml.clib==0.2.8
 safetensors==0.4.3
 scikit-learn==1.5.0
-scipy @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_15kdberrhr/croot/scipy_1717597139640/work/dist/scipy-1.13.1-cp311-cp311-macosx_10_15_x86_64.whl#sha256=2dffe286a8b1478d13118a812497b6b1db2b72a370e2ea070f6c078ac3d0984a
 sentence-transformers==3.0.1
 shapely==2.0.4
 six==1.16.0
