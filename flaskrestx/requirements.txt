@@ -14,6 +14,7 @@ cffi==1.16.0
 charset-normalizer==3.3.2
 click==8.1.7
 cn2an==0.5.22
+coloredlogs==15.0.1
 cryptography==42.0.8
 Cython==3.0.10
 dashscope==1.20.0
@@ -25,6 +26,7 @@ Deprecated==1.2.14
 dill==0.3.8
 dirtyjson==1.0.8
 distro==1.9.0
+docx==0.2.4
 elastic-transport==8.13.1
 elasticsearch==8.14.0
 elasticsearch-dsl==8.14.0
@@ -36,6 +38,7 @@ Flask-Cors==4.0.1
 Flask-Login==0.6.3
 flask-restx==1.3.0
 Flask-Session==0.8.0
+flatbuffers==24.3.25
 frozenlist==1.4.1
 fsspec==2024.5.0
 google==3.0.0
@@ -45,6 +48,7 @@ hanziconv==0.3.2
 httpcore==1.0.5
 httpx==0.27.0
 huggingface-hub==0.23.3
+humanfriendly==10.0
 idna==3.7
 importlib_resources==6.4.0
 itsdangerous==2.2.0
@@ -56,6 +60,7 @@ lightgbm @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_1
 llama-cloud==0.0.6
 llama-index-core==0.10.51
 llama-index-postprocessor-jinaai-rerank==0.1.6
+lxml==5.2.2
 MarkupSafe==2.1.5
 marshmallow==3.21.3
 mpmath==1.3.0
@@ -69,6 +74,7 @@ nltk==3.8.1
 numpy @ file:///private/var/folders/c_/qfmhj66j0tn016nkx_th4hxm0000gp/T/abs_b7iptlxgej/croot/numpy_and_numpy_base_1708638622773/work/dist/numpy-1.26.4-cp311-cp311-macosx_10_9_x86_64.whl#sha256=ca93246020dd5cf5864c57fea8d3b0afd6530b245222908737c7f434a105fdc2
 nvidia-pyindex==1.0.9
 ollama==0.2.1
+onnxruntime==1.16.3
 openai==1.35.7
 opencv-python==4.10.0.84
 openpyxl==3.1.4
@@ -85,6 +91,7 @@ py==1.11.0
 pyarrow==16.1.0
 pyarrow-hotfix==0.6
 pybind11==2.12.0
+pyclipper==1.3.0.post5
 pycparser==2.22
 pycryptodome==3.9.9
 pycryptodomex==3.20.0
@@ -108,6 +115,7 @@ safetensors==0.4.3
 scikit-learn==1.5.0
 scipy @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_15kdberrhr/croot/scipy_1717597139640/work/dist/scipy-1.13.1-cp311-cp311-macosx_10_15_x86_64.whl#sha256=2dffe286a8b1478d13118a812497b6b1db2b72a370e2ea070f6c078ac3d0984a
 sentence-transformers==3.0.1
+shapely==2.0.4
 six==1.16.0
 sniffio==1.3.1
 soupsieve==2.5
