@@ -1,15 +1,3 @@
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
 import re
 from copy import deepcopy
 from io import BytesIO
@@ -24,20 +12,35 @@ from docx import Document
 from PIL import Image
 class Excel(ExcelParser):
     def __call__(self, fnm, binary=None, callback=None):
+        """
+        自定义调用方法，用于解析Excel文件中的问题和答案。
+
+        :param fnm: Excel文件名，可以是文件路径或URL。
+        :param binary: Excel文件的二进制内容，可选参数。
+        :param callback: 回调函数，用于报告解析进度和结果。
+        :return: 包含问题和答案的列表。
+        """
+        # 根据是否提供二进制内容来加载工作簿
         if not binary:
             wb = load_workbook(fnm)
         else:
             wb = load_workbook(BytesIO(binary))
+
+        # 计算工作簿中所有表格的总行数
         total = 0
         for sheetname in wb.sheetnames:
             total += len(list(wb[sheetname].rows))
 
+        # 初始化结果和失败列表
         res, fails = [], []
+
+        # 遍历每个表格，提取问题和答案
         for sheetname in wb.sheetnames:
             ws = wb[sheetname]
             rows = list(ws.rows)
             for i, r in enumerate(rows):
                 q, a = "", ""
+                # 提取每行中的问题和答案
                 for cell in r:
                     if not cell.value:
                         continue
@@ -47,22 +50,29 @@ class Excel(ExcelParser):
                         a = str(cell.value)
                     else:
                         break
+                # 如果成功提取到问题和答案，添加到结果列表
                 if q and a:
                     res.append((q, a))
+                # 否则，将行号添加到失败列表
                 else:
                     fails.append(str(i + 1))
+                # 如果结果数量达到一定数量，调用回调函数报告进度
                 if len(res) % 999 == 0:
-                    callback(len(res) *
-                             0.6 /
-                             total, ("Extract Q&A: {}".format(len(res)) +
-                                     (f"{len(fails)} failure, line: %s..." %
-                                      (",".join(fails[:3])) if fails else "")))
+                    callback(len(res) * 0.6 / total, ("Extract Q&A: {}".format(len(res)) +
+                                                       (f"{len(fails)} failure, line: %s..." %
+                                                        (",".join(fails[:3])) if fails else "")))
 
+        # 解析完成后，再次调用回调函数报告最终结果
         callback(0.6, ("Extract Q&A: {}. ".format(len(res)) + (
             f"{len(fails)} failure, line: %s..." % (",".join(fails[:3])) if fails else "")))
+
+        # 检查提取的问题中是否包含英文
         self.is_english = is_english(
             [rmPrefix(q) for q, _ in random_choices(res, k=30) if len(q) > 1])
+
+        # 返回包含问题和答案的列表
         return res
+
 
 class Pdf(PdfParser):
     def __call__(self, filename, binary=None, from_page=0,
