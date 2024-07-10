@@ -1,28 +1,33 @@
-#
-#  Copyright 2024 The InfiniFlow Authors. All Rights Reserved.
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
+# 导入必要的库，用于环境变量的管理和加载
 import os
 import dotenv
 import typing
+# 从api.utils.file_utils模块导入获取项目基础目录的函数
 from api.utils.file_utils import get_project_base_directory
 
-
+# 加载.env文件中的环境变量，并返回它们作为一个映射
 def get_versions() -> typing.Mapping[str, typing.Any]:
+    """
+    加载并返回.env文件中的环境变量。
+    
+    返回:
+        typing.Mapping[str, typing.Any]: 包含环境变量名称和值的映射。
+    """
+    # 加载.env文件中的环境变量
     dotenv.load_dotenv(dotenv.find_dotenv())
+    # 返回加载的环境变量
     return dotenv.dotenv_values()
 
 
+# 获取RAGFLOW_VERSION环境变量的值，如果未设置，则返回"dev"
 def get_rag_version() -> typing.Optional[str]:
+    """
+    获取RAGFLOW_VERSION环境变量的值。
+    
+    如果环境变量未设置，则默认返回"dev"。
+    
+    返回:
+        typing.Optional[str]: RAGFLOW_VERSION的值，如果未设置则为"dev"。
+    """
+    # 从环境变量中获取RAGFLOW_VERSION的值，如果不存在则使用"dev"作为默认值
     return get_versions().get("RAGFLOW_VERSION", "dev")
