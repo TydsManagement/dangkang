@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 import re
+import  threading
 import requests
 import torch
 from FlagEmbedding import FlagReranker
@@ -49,8 +50,9 @@ class Base(ABC):
         raise NotImplementedError("Please implement encode method!")
 
 
-class DefaultRerank:
+class DefaultRerank(Base):
     _model = None
+    _model_lock = threading.Lock()
 
     def __init__(self, key, model_name, **kwargs):
         """
@@ -70,20 +72,16 @@ class DefaultRerank:
         """
         # 检查是否已初始化默认重排名模型
         if not DefaultRerank._model:
-            try:
-                # 尝试从缓存目录加载模型，使用半精度浮点数如果CUDA可用
-                self._model = FlagReranker(os.path.join(get_home_cache_dir(), re.sub(r"^[a-zA-Z]+/", "", model_name)),
-                                           use_fp16=torch.cuda.is_available())
-            except Exception as e:
-                # 如果加载失败，从Hugging Face仓库下载模型到缓存目录
-                self._model = snapshot_download(repo_id=model_name,
-                                                local_dir=os.path.join(get_home_cache_dir(),
-                                                                       re.sub(r"^[a-zA-Z]+/", "", model_name)),
-                                                local_dir_use_symlinks=False)
-                # 使用下载的模型初始化FlagReranker
-                self._model = FlagReranker(os.path.join(get_home_cache_dir(), model_name),
-                                           use_fp16=torch.cuda.is_available())
-
+            with DefaultRerank._model_lock:
+                if not DefaultRerank._model:
+                    try:
+                        DefaultRerank._model = FlagReranker(os.path.join(get_home_cache_dir(), re.sub(r"^[a-zA-Z]+/", "", model_name)), use_fp16=torch.cuda.is_available())
+                    except Exception as e:
+                        model_dir = snapshot_download(repo_id= model_name,
+                                                      local_dir=os.path.join(get_home_cache_dir(), re.sub(r"^[a-zA-Z]+/", "", model_name)),
+                                                      local_dir_use_symlinks=False)
+                        DefaultRerank._model = FlagReranker(model_dir, use_fp16=torch.cuda.is_available())
+        self._model = DefaultRerank._model
 
     def similarity(self, query: str, texts: list):
         """
@@ -110,6 +108,7 @@ class DefaultRerank:
         # 分批计算相似度分数
         for i in range(0, len(pairs), batch_size):
             scores = self._model.compute_score(pairs[i:i + batch_size], max_length=2048)
+            scores = sigmoid(np.array(scores)).tolist()
             # 如果返回的是单个分数，则添加到结果列表中；如果是多个分数，则扩展结果列表
             if isinstance(scores, float):
                 res.append(scores)
@@ -120,26 +119,10 @@ class DefaultRerank:
         return np.array(res), token_count
 
 
-class JinaRanker:
-    """
-    该类用于初始化Jina排名器，它使用Jina AI的rerank API来对文档进行重新排名。
-
-    参数:
-    key: str
-        API访问密钥，用于授权访问Jina AI的rerank API。
-    model_name: str, 可选
-        模型名称，用于指定使用的排名模型，默认为"jina-reranker-v1-base-en"。
-    base_url: str, 可选
-        API的基础URL，默认为"https://api.jina.ai/v1/rerank"。
-    """
-
-    def __init__(self, key, model_name="jina-reranker-v1-base-en", base_url="https://api.jina.ai/v1/rerank"):
-        """
-        初始化JinaRanker类实例，设置API访问的基础URL、请求头和模型名称。
-        """
-        # 设置API的基础URL
-        self.base_url = base_url
-        # 设置请求头，包括内容类型和授权信息
+class JinaRerank(Base):
+    def __init__(self, key, model_name="jina-reranker-v1-base-en",
+                 base_url="https://api.jina.ai/v1/rerank"):
+        self.base_url = "https://api.jina.ai/v1/rerank"
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {key}"
@@ -178,8 +161,9 @@ class JinaRanker:
         return np.array([d["relevance_score"] for d in res["results"]]), res["usage"]["total_tokens"]
 
 
-class YoudaoRerank:
-    _model = None  # 类级变量，用于存储BCE模型实例
+class YoudaoRerank(DefaultRerank):
+    _model = None
+    _model_lock = threading.Lock()
 
     def __init__(self, key=None, model_name="maidalun1020/bce-reranker-base_v1", **kwargs):
         """
@@ -195,19 +179,20 @@ class YoudaoRerank:
         """
         from BCEmbedding import RerankerModel
         if not YoudaoRerank._model:
-            try:
-                print("LOADING BCE...")
-                # 尝试从用户缓存目录加载模型，路径中的model_name经过处理，移除了开头的字母序列
-                YoudaoRerank._model = RerankerModel(model_name_or_path=os.path.join(
-                    get_home_cache_dir(),
-                    re.sub(r"^[a-zA-Z]+/", "", model_name)))
-            except Exception as e:
-                # 加载失败时，回退到使用不同的model_name尝试加载
-                YoudaoRerank._model = RerankerModel(
-                    model_name_or_path=model_name.replace(
-                        "maidalun1020", "InfiniFlow"))
+            with YoudaoRerank._model_lock:
+                if not YoudaoRerank._model:
+                    try:
+                        print("LOADING BCE...")
+                        YoudaoRerank._model = RerankerModel(model_name_or_path=os.path.join(
+                            get_home_cache_dir(),
+                            re.sub(r"^[a-zA-Z]+/", "", model_name)))
+                    except Exception as e:
+                        YoudaoRerank._model = RerankerModel(
+                            model_name_or_path=model_name.replace(
+                                "maidalun1020", "InfiniFlow"))
 
-    
+        self._model = YoudaoRerank._model
+
     def similarity(self, query: str, texts: list):
         """
         计算查询字符串与一系列文本的相似度。
