@@ -14,7 +14,7 @@ minio:
   password: 'infini_rag_flow'
   host: 'minio:9000'
 es:
-  hosts: 'http://es:9200'
+  hosts: 'http://127.0.0.1:9200'
   username: 'elastic'
   password: 'infini_rag_flow'
 redis:

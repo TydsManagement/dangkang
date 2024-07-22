@@ -1,34 +1,45 @@
-#
-#  Copyright 2024 The InfiniFlow Authors. All Rights Reserved.
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
+# 导入AzureOpenAI类，用于与Azure OpenAI服务进行交互
 from openai.lib.azure import AzureOpenAI
+# 导入ZhipuAI类，用于访问智谱AI的相关功能
 from zhipuai import ZhipuAI
+# 导入Generation类，用于调用达观智能的文本生成服务
 from dashscope import Generation
+# 导入ABC类，作为抽象基类，提供通用的接口或方法
 from abc import ABC
+# 导入OpenAI类和openai模块，用于与OpenAI平台进行交互
 from openai import OpenAI
 import openai
+# 导入Client类，用于访问Ollama聊天机器人服务
 from ollama import Client
+# 导入MaasService类，用于访问火山引擎的机器学习即服务（MaaS）
 from volcengine.maas.v2 import MaasService
+# 导入is_english函数，用于判断文本是否为英文
 from rag.nlp import is_english
+# 导入num_tokens_from_string函数，用于计算字符串中的令牌数量
 from rag.utils import num_tokens_from_string
 
 
 class Base(ABC):
     def __init__(self, key, model_name, base_url):
+        """
+        初始化 OpenAI 客户端对象并设置模型名称。
+
+        该构造函数用于创建一个针对特定 OpenAI 模型的客户端实例。
+        它允许用户通过提供的 API 密钥和模型名称来访问和使用 OpenAI 服务。
+
+        参数:
+        key (str): 用户的 OpenAI API 密钥，用于身份验证和访问服务。
+        model_name (str): 指定要使用的 OpenAI 模型的名称，用于调用特定模型的功能。
+        base_url (str): OpenAI 服务的基 URL，用于指定 API 调用的端点。
+
+        返回:
+        None
+        """
+        # 初始化 OpenAI 客户端，使用提供的 API 密钥和基础URL
         self.client = OpenAI(api_key=key, base_url=base_url)
+        # 设置模型名称，用于后续调用特定模型
         self.model_name = model_name
+
 
     def chat(self, system, history, gen_conf):
         if system:
@@ -86,7 +97,20 @@ class MoonshotChat(Base):
 
 class XinferenceChat(Base):
     def __init__(self, key=None, model_name="", base_url=""):
+        """
+        初始化函数，用于创建类的实例。
+
+        参数:
+        key (Optional[str]): API密钥，用于访问某些在线服务。默认为None。
+        model_name (str): 模型名称，用于标识特定的模型。默认为空字符串。
+        base_url (str): API的基础URL，用于构建请求的地址。默认为空字符串。
+
+        注意:
+        这里将`key`参数重新赋值为"xxx"，是为了隐藏真实的密钥信息，实际使用时应根据具体情况修改。
+        """
+        # 由于实际开发中密钥信息不应公开，这里使用"xxx"代替真实密钥
         key = "xxx"
+        # 调用父类的初始化函数，传入修改后的key以及其他参数
         super().__init__(key, model_name, base_url)
 
 
