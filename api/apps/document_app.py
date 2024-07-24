@@ -129,6 +129,8 @@ def upload():
             }
             if doc["type"] == FileType.VISUAL:
                 doc["parser_id"] = ParserType.PICTURE.value
+            if doc["type"] == FileType.AURAL:
+                doc["parser_id"] = ParserType.AUDIO.value
             if re.search(r"\.(ppt|pptx|pages)$", filename):
                 doc["parser_id"] = ParserType.PRESENTATION.value
             # 将文件信息插入数据库
@@ -225,6 +227,8 @@ def web_crawl():
         # 根据文件类型调整文档的解析器ID
         if doc["type"] == FileType.VISUAL:
             doc["parser_id"] = ParserType.PICTURE.value
+        if doc["type"] == FileType.AURAL:
+            doc["parser_id"] = ParserType.AUDIO.value
         if re.search(r"\.(ppt|pptx|pages)$", filename):
             doc["parser_id"] = ParserType.PRESENTATION.value
         # 插入文档记录
@@ -589,7 +593,8 @@ def rename():
             return get_data_error_result(retmsg="Document not found!")
 
         # 检查新名称的文件后缀是否与原文件一致
-        if pathlib.Path(req["name"].lower()).suffix != pathlib.Path(doc.name.lower()).suffix:
+        if pathlib.Path(req["name"].lower()).suffix != pathlib.Path(
+                doc.name.lower()).suffix:
             return get_json_result(
                 data=False,
                 retmsg="The extension of file can't be changed",
@@ -602,8 +607,10 @@ def rename():
                     retmsg="Duplicated document name in the same knowledgebase.")
 
         # 更新文档名称
-        if not DocumentService.update_by_id(req["doc_id"], {"name": req["name"]}):
-            return get_data_error_result(retmsg="Database error (Document rename)!")
+        if not DocumentService.update_by_id(
+                req["doc_id"], {"name": req["name"]}):
+            return get_data_error_result(
+                retmsg="Database error (Document rename)!")
 
         # 如果文档关联了文件，更新文件名称
         informs = File2DocumentService.get_by_document_id(req["doc_id"])

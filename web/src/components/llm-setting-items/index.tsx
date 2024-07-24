@@ -1,23 +1,37 @@
-import { LlmModelType, ModelVariableType } from '@/constants/knowledge';
+import {
+  LlmModelType,
+  ModelVariableType,
+  settledModelVariableMap,
+} from '@/constants/knowledge';
 import { Divider, Flex, Form, InputNumber, Select, Slider, Switch } from 'antd';
 import camelCase from 'lodash/camelCase';
 
-import { useTranslate } from '@/hooks/commonHooks';
-import { useSelectLlmOptionsByModelType } from '@/hooks/llmHooks';
-import { useMemo } from 'react';
+import { useTranslate } from '@/hooks/common-hooks';
+import { useSelectLlmOptionsByModelType } from '@/hooks/llm-hooks';
+import { useCallback, useMemo } from 'react';
 import styles from './index.less';
 
 interface IProps {
   prefix?: string;
-  handleParametersChange(value: ModelVariableType): void;
+  formItemLayout?: any;
+  handleParametersChange?(value: ModelVariableType): void;
 }
 
-const LlmSettingItems = ({ prefix, handleParametersChange }: IProps) => {
+const LlmSettingItems = ({ prefix, formItemLayout = {} }: IProps) => {
+  const form = Form.useFormInstance();
   const { t } = useTranslate('chat');
   const parameterOptions = Object.values(ModelVariableType).map((x) => ({
     label: t(camelCase(x)),
     value: x,
   }));
+
+  const handleParametersChange = useCallback(
+    (value: ModelVariableType) => {
+      const variable = settledModelVariableMap[value];
+      form?.setFieldsValue(variable);
+    },
+    [form],
+  );
 
   const memorizedPrefix = useMemo(() => (prefix ? [prefix] : []), [prefix]);
 
@@ -29,15 +43,17 @@ const LlmSettingItems = ({ prefix, handleParametersChange }: IProps) => {
         label={t('model')}
         name="llm_id"
         tooltip={t('modelTip')}
+        {...formItemLayout}
         rules={[{ required: true, message: t('modelMessage') }]}
       >
-        <Select options={modelOptions[LlmModelType.Chat]} showSearch />
+        <Select options={[...modelOptions[LlmModelType.Chat], ...modelOptions[LlmModelType.Image2text],]} showSearch/>
       </Form.Item>
       <Divider></Divider>
       <Form.Item
         label={t('freedom')}
-        name="parameters"
+        name="parameter"
         tooltip={t('freedomTip')}
+        {...formItemLayout}
         initialValue={ModelVariableType.Precise}
       >
         <Select<ModelVariableType>
@@ -45,7 +61,11 @@ const LlmSettingItems = ({ prefix, handleParametersChange }: IProps) => {
           onChange={handleParametersChange}
         />
       </Form.Item>
-      <Form.Item label={t('temperature')} tooltip={t('temperatureTip')}>
+      <Form.Item
+        label={t('temperature')}
+        tooltip={t('temperatureTip')}
+        {...formItemLayout}
+      >
         <Flex gap={20} align="center">
           <Form.Item
             name={'temperatureEnabled'}
@@ -87,7 +107,7 @@ const LlmSettingItems = ({ prefix, handleParametersChange }: IProps) => {
           </Form.Item>
         </Flex>
       </Form.Item>
-      <Form.Item label={t('topP')} tooltip={t('topPTip')}>
+      <Form.Item label={t('topP')} tooltip={t('topPTip')} {...formItemLayout}>
         <Flex gap={20} align="center">
           <Form.Item name={'topPEnabled'} valuePropName="checked" noStyle>
             <Switch size="small" />
@@ -122,7 +142,11 @@ const LlmSettingItems = ({ prefix, handleParametersChange }: IProps) => {
           </Form.Item>
         </Flex>
       </Form.Item>
-      <Form.Item label={t('presencePenalty')} tooltip={t('presencePenaltyTip')}>
+      <Form.Item
+        label={t('presencePenalty')}
+        tooltip={t('presencePenaltyTip')}
+        {...formItemLayout}
+      >
         <Flex gap={20} align="center">
           <Form.Item
             name={'presencePenaltyEnabled'}
@@ -170,6 +194,7 @@ const LlmSettingItems = ({ prefix, handleParametersChange }: IProps) => {
       <Form.Item
         label={t('frequencyPenalty')}
         tooltip={t('frequencyPenaltyTip')}
+        {...formItemLayout}
       >
         <Flex gap={20} align="center">
           <Form.Item
@@ -215,7 +240,11 @@ const LlmSettingItems = ({ prefix, handleParametersChange }: IProps) => {
           </Form.Item>
         </Flex>
       </Form.Item>
-      <Form.Item label={t('maxTokens')} tooltip={t('maxTokensTip')}>
+      <Form.Item
+        label={t('maxTokens')}
+        tooltip={t('maxTokensTip')}
+        {...formItemLayout}
+      >
         <Flex gap={20} align="center">
           <Form.Item name={'maxTokensEnabled'} valuePropName="checked" noStyle>
             <Switch size="small" />

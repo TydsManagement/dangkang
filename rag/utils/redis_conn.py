@@ -107,8 +107,12 @@ class RedisDB:
         :param queue_name: 队列名称
         :return: 返回指定队列的第一个分组信息
         """
-        self.REDIS.ping()  # 发送ping命令检查Redis连接是否正常
-        return self.REDIS.xinfo_groups(queue_name)[0]  # 获取指定队列的第一个分组信息
+        self.REDIS.ping()
+        a, b = 'xx', 'yy'
+        self.REDIS.set(a, b, 3)
+
+        if self.REDIS.get(a) == b:
+            return True
 
     def is_alive(self):
         """

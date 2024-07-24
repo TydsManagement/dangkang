@@ -84,11 +84,17 @@ class ParserType(StrEnum):
     NAIVE = "naive"
     PICTURE = "picture"
     ONE = "one"
+    AUDIO = "audio"
 
 
 class FileSource(StrEnum):
     LOCAL = ""
     KNOWLEDGEBASE = "knowledgebase"
     S3 = "s3"
+
+
+class CanvasType(StrEnum):
+    ChatBot = "chatbot"
+    DocBot = "docbot"
 
 KNOWLEDGEBASE_FOLDER_NAME=".knowledgebase"

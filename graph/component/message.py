@@ -32,7 +32,7 @@ class MessageParam(ComponentParamBase):
         self.messages = []
 
     def check(self):
-        self.check_empty(self.messages, "Message")
+        self.check_empty(self.messages, "[Message]")
         return True
 
 
@@ -46,7 +46,11 @@ class Message(ComponentBase, ABC):
         return Message.be_output(random.choice(self._param.messages))
 
     def stream_output(self):
+        res = None
         if self._param.messages:
-            yield {"content": random.choice(self._param.messages)}
+            res = {"content": random.choice(self._param.messages)}
+            yield res
+
+        self.set_output(res)
 
 

@@ -2,12 +2,13 @@ import { MessageType } from '@/constants/chat';
 import {
   useCreateSharedConversation,
   useFetchSharedConversation,
-} from '@/hooks/chatHooks';
-import { useSendMessageWithSse } from '@/hooks/logicHooks';
-import { useOneNamespaceEffectsLoading } from '@/hooks/storeHooks';
+} from '@/hooks/chat-hooks';
+import { useSendMessageWithSse } from '@/hooks/logic-hooks';
+import { useOneNamespaceEffectsLoading } from '@/hooks/store-hooks';
 import { IAnswer } from '@/interfaces/database/chat';
 import api from '@/utils/api';
 import omit from 'lodash/omit';
+import trim from 'lodash/trim';
 import {
   Dispatch,
   SetStateAction,
@@ -133,6 +134,10 @@ export const useSelectCurrentSharedConversation = (conversationId: string) => {
   };
 };
 
+export const useSendButtonDisabled = (value: string) => {
+  return trim(value) === '';
+};
+
 export const useSendSharedMessage = (
   conversation: IClientConversation,
   addNewestConversation: (message: string) => void,
@@ -201,6 +206,7 @@ export const useSendSharedMessage = (
   }, [answer, addNewestAnswer]);
 
   const handlePressEnter = useCallback(() => {
+    if (trim(value) === '') return;
     if (done) {
       setValue('');
       addNewestConversation(value);

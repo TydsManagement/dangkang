@@ -1,9 +1,10 @@
-import RenameModal from '@/components/rename-modal';
 import { PlusOutlined } from '@ant-design/icons';
 import { Button, Empty, Flex, Spin } from 'antd';
+import CreateFlowModal from './create-flow-modal';
 import FlowCard from './flow-card';
 import { useFetchDataOnMount, useSaveFlow } from './hooks';
 
+import { useTranslate } from '@/hooks/common-hooks';
 import styles from './index.less';
 
 const FlowList = () => {
@@ -14,6 +15,7 @@ const FlowList = () => {
     flowSettingLoading,
     onFlowOk,
   } = useSaveFlow();
+  const { t } = useTranslate('flow');
 
   const { list, loading } = useFetchDataOnMount();
 
@@ -25,7 +27,7 @@ const FlowList = () => {
           icon={<PlusOutlined />}
           onClick={showFlowSettingModal}
         >
-          create canvas
+          {t('createGraph')}
         </Button>
       </Flex>
       <Spin spinning={loading}>
@@ -39,13 +41,15 @@ const FlowList = () => {
           )}
         </Flex>
       </Spin>
-      <RenameModal
-        visible={flowSettingVisible}
-        onOk={onFlowOk}
-        loading={flowSettingLoading}
-        hideModal={hideFlowSettingModal}
-        initialName=""
-      ></RenameModal>
+      {flowSettingVisible && (
+        <CreateFlowModal
+          visible={flowSettingVisible}
+          onOk={onFlowOk}
+          loading={flowSettingLoading}
+          hideModal={hideFlowSettingModal}
+          initialName=""
+        ></CreateFlowModal>
+      )}
     </Flex>
   );
 };

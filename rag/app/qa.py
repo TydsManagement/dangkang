@@ -1,3 +1,15 @@
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
 import re
 from copy import deepcopy
 from io import BytesIO
@@ -5,42 +17,28 @@ from timeit import default_timer as timer
 from nltk import word_tokenize
 from openpyxl import load_workbook
 from rag.nlp import is_english, random_choices, find_codec, qbullets_category, add_positions, has_qbullet, docx_question_level
-from rag.nlp import rag_tokenizer, tokenize_table
+from rag.nlp import rag_tokenizer, tokenize_table, concat_img
 from rag.settings import cron_logger
 from deepdoc.parser import PdfParser, ExcelParser, DocxParser
 from docx import Document
 from PIL import Image
+from markdown import markdown
 class Excel(ExcelParser):
     def __call__(self, fnm, binary=None, callback=None):
-        """
-        自定义调用方法，用于解析Excel文件中的问题和答案。
-
-        :param fnm: Excel文件名，可以是文件路径或URL。
-        :param binary: Excel文件的二进制内容，可选参数。
-        :param callback: 回调函数，用于报告解析进度和结果。
-        :return: 包含问题和答案的列表。
-        """
-        # 根据是否提供二进制内容来加载工作簿
         if not binary:
             wb = load_workbook(fnm)
         else:
             wb = load_workbook(BytesIO(binary))
-
-        # 计算工作簿中所有表格的总行数
         total = 0
         for sheetname in wb.sheetnames:
             total += len(list(wb[sheetname].rows))
 
-        # 初始化结果和失败列表
         res, fails = [], []
-
-        # 遍历每个表格，提取问题和答案
         for sheetname in wb.sheetnames:
             ws = wb[sheetname]
             rows = list(ws.rows)
             for i, r in enumerate(rows):
                 q, a = "", ""
-                # 提取每行中的问题和答案
                 for cell in r:
                     if not cell.value:
                         continue
@@ -50,29 +48,22 @@ class Excel(ExcelParser):
                         a = str(cell.value)
                     else:
                         break
-                # 如果成功提取到问题和答案，添加到结果列表
                 if q and a:
                     res.append((q, a))
-                # 否则，将行号添加到失败列表
                 else:
                     fails.append(str(i + 1))
-                # 如果结果数量达到一定数量，调用回调函数报告进度
                 if len(res) % 999 == 0:
-                    callback(len(res) * 0.6 / total, ("Extract Q&A: {}".format(len(res)) +
-                                                       (f"{len(fails)} failure, line: %s..." %
-                                                        (",".join(fails[:3])) if fails else "")))
+                    callback(len(res) *
+                             0.6 /
+                             total, ("Extract Q&A: {}".format(len(res)) +
+                                     (f"{len(fails)} failure, line: %s..." %
+                                      (",".join(fails[:3])) if fails else "")))
 
-        # 解析完成后，再次调用回调函数报告最终结果
         callback(0.6, ("Extract Q&A: {}. ".format(len(res)) + (
             f"{len(fails)} failure, line: %s..." % (",".join(fails[:3])) if fails else "")))
-
-        # 检查提取的问题中是否包含英文
         self.is_english = is_english(
             [rmPrefix(q) for q, _ in random_choices(res, k=30) if len(q) > 1])
-
-        # 返回包含问题和答案的列表
         return res
-
 
 class Pdf(PdfParser):
     def __call__(self, filename, binary=None, from_page=0,
@@ -110,27 +101,69 @@ class Pdf(PdfParser):
         last_index = -1
         last_box = {'text':''}
         last_bull = None
+        def sort_key(element):
+            tbls_pn = element[1][0][0]
+            tbls_top = element[1][0][3]
+            return tbls_pn, tbls_top
+        tbls.sort(key=sort_key)
+        tbl_index = 0
+        last_pn, last_bottom = 0, 0
+        tbl_pn, tbl_left, tbl_right, tbl_top, tbl_bottom, tbl_tag, tbl_text = 1, 0, 0, 0, 0, '@@0\t0\t0\t0\t0##', ''
         for box in self.boxes:
             section, line_tag = box['text'], self._line_tag(box, zoomin)
             has_bull, index = has_qbullet(reg, box, last_box, last_index, last_bull, bull_x0_list)
             last_box, last_index, last_bull = box, index, has_bull
+            line_pn = float(line_tag.lstrip('@@').split('\t')[0])
+            line_top = float(line_tag.rstrip('##').split('\t')[3])
+            tbl_pn, tbl_left, tbl_right, tbl_top, tbl_bottom, tbl_tag, tbl_text = self.get_tbls_info(tbls, tbl_index)
             if not has_bull:  # No question bullet
                 if not last_q:
+                    if tbl_pn < line_pn or (tbl_pn == line_pn and tbl_top <= line_top):    # image passed
+                        tbl_index += 1
                     continue
                 else:
-                    last_a = f'{last_a}{section}'
-                    last_tag = f'{last_tag}{line_tag}'
+                    sum_tag = line_tag
+                    sum_section = section
+                    while ((tbl_pn == last_pn and tbl_top>= last_bottom) or (tbl_pn > last_pn)) \
+                        and ((tbl_pn == line_pn and tbl_top <= line_top) or (tbl_pn < line_pn)):    # add image at the middle of current answer
+                        sum_tag = f'{tbl_tag}{sum_tag}'
+                        sum_section = f'{tbl_text}{sum_section}'
+                        tbl_index += 1
+                        tbl_pn, tbl_left, tbl_right, tbl_top, tbl_bottom, tbl_tag, tbl_text = self.get_tbls_info(tbls, tbl_index)
+                    last_a = f'{last_a}{sum_section}'
+                    last_tag = f'{last_tag}{sum_tag}'
             else:
                 if last_q:
-                    qai_list.append((last_q, last_a, *self.crop(last_tag, need_position=True)))
+                    while ((tbl_pn == last_pn and tbl_top>= last_bottom) or (tbl_pn > last_pn)) \
+                        and ((tbl_pn == line_pn and tbl_top <= line_top) or (tbl_pn < line_pn)):    # add image at the end of last answer
+                        last_tag = f'{last_tag}{tbl_tag}'
+                        last_a = f'{last_a}{tbl_text}'
+                        tbl_index += 1
+                        tbl_pn, tbl_left, tbl_right, tbl_top, tbl_bottom, tbl_tag, tbl_text = self.get_tbls_info(tbls, tbl_index)
+                    image, poss = self.crop(last_tag, need_position=True)
+                    qai_list.append((last_q, last_a, image, poss))
                     last_q, last_a, last_tag = '', '', ''
                 last_q = has_bull.group()
                 _, end = has_bull.span()
                 last_a = section[end:]
                 last_tag = line_tag
+            last_bottom = float(line_tag.rstrip('##').split('\t')[4])
+            last_pn = line_pn
         if last_q:
             qai_list.append((last_q, last_a, *self.crop(last_tag, need_position=True)))
         return qai_list, tbls
+    def get_tbls_info(self, tbls, tbl_index):
+        if tbl_index >= len(tbls):
+            return 1, 0, 0, 0, 0, '@@0\t0\t0\t0\t0##', ''
+        tbl_pn = tbls[tbl_index][1][0][0]+1
+        tbl_left = tbls[tbl_index][1][0][1]
+        tbl_right = tbls[tbl_index][1][0][2]
+        tbl_top = tbls[tbl_index][1][0][3]
+        tbl_bottom = tbls[tbl_index][1][0][4]
+        tbl_tag = "@@{}\t{:.1f}\t{:.1f}\t{:.1f}\t{:.1f}##" \
+            .format(tbl_pn, tbl_left, tbl_right, tbl_top, tbl_bottom)
+        tbl_text = ''.join(tbls[tbl_index][0][1])
+        return tbl_pn, tbl_left, tbl_right, tbl_top, tbl_bottom, tbl_tag, tbl_text
 class Docx(DocxParser):
     def __init__(self):
         pass
@@ -142,26 +175,8 @@ class Docx(DocxParser):
         embed = img.xpath('.//a:blip/@r:embed')[0]
         related_part = document.part.related_parts[embed]
         image = related_part.image
-        image = Image.open(BytesIO(image.blob))
+        image = Image.open(BytesIO(image.blob)).convert('RGB')
         return image
-    def concat_img(self, img1, img2):
-        if img1 and not img2:
-            return img1
-        if not img1 and img2:
-            return img2
-        if not img1 and not img2:
-            return None
-        width1, height1 = img1.size
-        width2, height2 = img2.size
-
-        new_width = max(width1, width2)
-        new_height = height1 + height2
-        new_image = Image.new('RGB', (new_width, new_height))
-
-        new_image.paste(img1, (0, 0))
-        new_image.paste(img2, (0, height1))
-
-        return new_image
 
     def __call__(self, filename, binary=None, from_page=0, to_page=100000, callback=None):
         self.doc = Document(
@@ -179,7 +194,7 @@ class Docx(DocxParser):
             if not question_level or question_level > 6: # not a question
                 last_answer = f'{last_answer}\n{p_text}'
                 current_image = self.get_picture(self.doc, p)
-                last_image = self.concat_img(last_image, current_image)
+                last_image = concat_img(last_image, current_image)
             else:   # is a question
                 if last_answer or last_image:
                     sum_question = '\n'.join(question_stack)
@@ -334,14 +349,11 @@ def chunk(filename, binary=None, lang="Chinese", callback=None, **kwargs):
     elif re.search(r"\.pdf$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
         pdf_parser = Pdf()
-        count = 0
         qai_list, tbls = pdf_parser(filename if not binary else binary,
                                     from_page=0, to_page=10000, callback=callback)
         
-        res = tokenize_table(tbls, doc, eng)
 
         for q, a, image, poss in qai_list:
-            count += 1
             res.append(beAdocPdf(deepcopy(doc), q, a, eng, image, poss))
         return res
     elif re.search(r"\.(md|markdown)$", filename, re.IGNORECASE):
@@ -363,8 +375,6 @@ def chunk(filename, binary=None, lang="Chinese", callback=None, **kwargs):
         code_block = False
         level_index = [-1] * 7
         for index, l in enumerate(lines):
-            if not l.strip():
-                continue
             if l.strip().startswith('```'):
                 code_block = not code_block
             question_level, question = 0, ''
@@ -374,10 +384,10 @@ def chunk(filename, binary=None, lang="Chinese", callback=None, **kwargs):
             if not question_level or question_level > 6: # not a question
                 last_answer = f'{last_answer}\n{l}'
             else:   # is a question
-                if last_answer:
+                if last_answer.strip():
                     sum_question = '\n'.join(question_stack)
                     if sum_question:
-                        res.append(beAdoc(deepcopy(doc), sum_question, last_answer, eng))
+                        res.append(beAdoc(deepcopy(doc), sum_question, markdown(last_answer, extensions=['markdown.extensions.tables']), eng))
                     last_answer = ''
 
                 i = question_level
@@ -386,10 +396,10 @@ def chunk(filename, binary=None, lang="Chinese", callback=None, **kwargs):
                     level_stack.pop()
                 question_stack.append(question)
                 level_stack.append(question_level)
-        if last_answer:
+        if last_answer.strip():
             sum_question = '\n'.join(question_stack)
             if sum_question:
-                res.append(beAdoc(deepcopy(doc), sum_question, last_answer, eng))
+                res.append(beAdoc(deepcopy(doc), sum_question, markdown(last_answer, extensions=['markdown.extensions.tables']), eng))
         return res
     elif re.search(r"\.docx$", filename, re.IGNORECASE):
         docx_parser = Docx()

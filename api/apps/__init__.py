@@ -1,18 +1,3 @@
-#
-#  Copyright 2024 The InfiniFlow Authors. All Rights Reserved.
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
 import logging
 import os
 import sys
@@ -25,7 +10,7 @@ from flask_cors import CORS
 from api.db import StatusEnum
 from api.db.db_models import close_connection
 from api.db.services import UserService
-from api.utils import CustomJSONEncoder
+from api.utils import CustomJSONEncoder, commands
 
 from flask_session import Session
 from flask_login import LoginManager
@@ -60,6 +45,7 @@ Session(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 
+commands.register_commands(app)
 
 
 def search_pages_path(pages_dir):
