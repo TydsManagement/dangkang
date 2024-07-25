@@ -62,6 +62,7 @@ class RAGFlowDocxParser:
                 (r"^(20|19)[0-9]{2}年$", "Dt"),
                 (r"^(20|19)[0-9]{2}[年/-][0-9]{1,2}月*$", "Dt"),
                 ("^[0-9]{1,2}[月/-][0-9]{1,2}日*$", "Dt"),
+                (r"^第*[一二三四1-4]季度$", "Dt"),
                 (r"^(20|19)[0-9]{2}年*[一二三四1-4]季度$", "Dt"),
                 (r"^(20|19)[0-9]{2}[年]*[一二三四1-4]季度$", "Dt"),
                 (r"^(20|19)[0-9]{2}[ABCDE]$", "DT"),
@@ -213,7 +214,7 @@ class RAGFlowDocxParser:
 
                 # 检查run中是否有分页符，若有则页码加一
                 # 将页面断点检查器包装为静态方法
-                if RAGFlowDocxParser.has_page_break(run._element.xml):
+                if 'lastRenderedPageBreak' in run._element.xml:
                     pn += 1
 
             # 将当前段落的内容（拼接后的run文本）及段落样式名称加入内容列表

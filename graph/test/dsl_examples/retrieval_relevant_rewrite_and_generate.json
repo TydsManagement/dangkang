@@ -32,7 +32,7 @@
                     }
                 },
                 "downstream": ["relevant:0"],
-                "upstream": ["answer:0"]
+                "upstream": ["answer:0", "rewrite:0"]
             },
             "relevant:0": {
                 "obj": {

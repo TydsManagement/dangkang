@@ -38,7 +38,7 @@ from io import BytesIO
 import pandas as pd
 
 # 导入特定应用领域的处理模块，如法律、论文、演示文稿等。
-from rag.app import laws, paper, presentation, manual, qa, table, book, resume, picture, naive, one
+from rag.app import laws, paper, presentation, manual, qa, table, book, resume, picture, naive, one, audio
 
 # 导入数据库相关的枚举类型、文档服务和LLM服务类，用于数据库操作和大型语言模型的处理。
 from api.db import LLMType, ParserType
@@ -65,6 +65,7 @@ FACTORY = {
     ParserType.RESUME.value: resume,
     ParserType.PICTURE.value: picture,
     ParserType.ONE.value: one,
+    ParserType.AUDIO.value: audio
 }
 
 
@@ -466,7 +467,11 @@ def main():
             # 构建文档块
             cks = build(r)
             # 如果构建失败或没有生成块，跳过当前文档
-            if cks is None or not cks:
+            cron_logger.info("Build chunks({}): {}".format(r["name"], timer() - st))
+            if cks is None:
+                continue
+            if not cks:
+                callback(1., "No chunk! Done!")
                 continue
             # 设置进度并记录构建耗时
             callback(

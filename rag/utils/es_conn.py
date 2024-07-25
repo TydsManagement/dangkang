@@ -687,12 +687,11 @@ class ESConnection:
             if elasticsearch.__version__[0] < 8:
                 # Elasticsearch版本低于8时，直接创建索引
                 return self.es.indices.create(idxnm, body=mapping)
-            else:
-                # Elasticsearch版本等于或高于8时，使用IndicesClient创建索引
-                from elasticsearch.client import IndicesClient
-                return IndicesClient(self.es).create(index=idxnm,
-                                                     settings=mapping["settings"],
-                                                     mappings=mapping["mappings"])
+            # Elasticsearch版本等于或高于8时，使用IndicesClient创建索引
+            from elasticsearch.client import IndicesClient
+            return IndicesClient(self.es).create(index=idxnm,
+                                                 settings=mapping["settings"],
+                                                 mappings=mapping["mappings"])
         except Exception as e:
             # 记录创建索引时的异常信息
             es_logger.error("ES create index error %s ----%s" % (idxnm, str(e)))

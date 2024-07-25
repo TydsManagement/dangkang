@@ -1,10 +1,9 @@
-import { Button, Flex, Space } from 'antd';
-
+import { useTranslate } from '@/hooks/common-hooks';
 import { useFetchFlow } from '@/hooks/flow-hooks';
 import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Button, Flex, Space } from 'antd';
 import { Link } from 'umi';
-import { useSaveGraph } from '../hooks';
-
+import { useSaveGraph, useSaveGraphBeforeOpeningDebugDrawer } from '../hooks';
 import styles from './index.less';
 
 interface IProps {
@@ -13,8 +12,9 @@ interface IProps {
 
 const FlowHeader = ({ showChatDrawer }: IProps) => {
   const { saveGraph } = useSaveGraph();
-
+  const handleRun = useSaveGraphBeforeOpeningDebugDrawer(showChatDrawer);
   const { data } = useFetchFlow();
+  const { t } = useTranslate('flow');
 
   return (
     <>
@@ -31,11 +31,11 @@ const FlowHeader = ({ showChatDrawer }: IProps) => {
           <h3>{data.title}</h3>
         </Space>
         <Space size={'large'}>
-          <Button onClick={showChatDrawer}>
-            <b>Debug</b>
+          <Button onClick={handleRun}>
+            <b>{t('run')}</b>
           </Button>
           <Button type="primary" onClick={saveGraph}>
-            <b>Save</b>
+            <b>{t('save')}</b>
           </Button>
         </Space>
       </Flex>

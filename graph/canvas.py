@@ -102,16 +102,22 @@ class Canvas(ABC):
         self.load()
 
     def load(self):
-        assert self.dsl.get("components", {}).get("begin"), "There have to be a 'Begin' component."
-
         self.components = self.dsl["components"]
+        cpn_nms = set([])
         for k, cpn in self.components.items():
+            cpn_nms.add(cpn["obj"]["component_name"])
+
+        assert "Begin" in cpn_nms, "There have to be an 'Begin' component."
+        assert "Answer" in cpn_nms, "There have to be an 'Answer' component."
+
+        for k, cpn in self.components.items():
+            cpn_nms.add(cpn["obj"]["component_name"])
             param = component_class(cpn["obj"]["component_name"] + "Param")()
             param.update(cpn["obj"]["params"])
             param.check()
             cpn["obj"] = component_class(cpn["obj"]["component_name"])(self, k, param)
             if cpn["obj"].component_name == "Categorize":
-                for _,desc in param.category_description.items():
+                for _, desc in param.category_description.items():
                     if desc["to"] not in cpn["downstream"]:
                         cpn["downstream"].append(desc["to"])
 
@@ -129,9 +135,21 @@ class Canvas(ABC):
         self.dsl["answer"] = self.answer
         self.dsl["reference"] = self.reference
         self.dsl["embed_id"] = self._embed_id
-        dsl = deepcopy(self.dsl)
+        dsl = {
+            "components": {}
+        }
+        for k in self.dsl.keys():
+            if k in ["components"]:continue
+            dsl[k] = deepcopy(self.dsl[k])
+
         for k, cpn in self.components.items():
-            dsl["components"][k]["obj"] = json.loads(str(cpn["obj"]))
+            if k not in dsl["components"]:
+                dsl["components"][k] = {}
+            for c in cpn.keys():
+                if c == "obj":
+                    dsl["components"][k][c] = json.loads(str(cpn["obj"]))
+                    continue
+                dsl["components"][k][c] = deepcopy(cpn[c])
         return json.dumps(dsl, ensure_ascii=False)
 
     def reset(self):
@@ -140,7 +158,8 @@ class Canvas(ABC):
         self.messages = []
         self.answer = []
         self.reference = []
-        self.components = {}
+        for k, cpn in self.components.items():
+            self.components[k]["obj"].reset()
         self._embed_id = ""
 
     def run(self, **kwargs):
@@ -153,6 +172,9 @@ class Canvas(ABC):
             except Exception as e:
                 ans = ComponentBase.be_output(str(e))
             self.path[-1].append(cpn_id)
+            if kwargs.get("stream"):
+                assert isinstance(ans, partial)
+                return ans
             self.history.append(("assistant", ans.to_dict("records")))
             return ans
 
@@ -166,21 +188,29 @@ class Canvas(ABC):
         def prepare2run(cpns):
             nonlocal ran, ans
             for c in cpns:
+                if self.path[-1] and c == self.path[-1][-1]: continue
                 cpn = self.components[c]["obj"]
                 if cpn.component_name == "Answer":
                     self.answer.append(c)
                 else:
                     if DEBUG: print("RUN: ", c)
+                    if cpn.component_name == "Generate":
+                        cpids = cpn.get_dependent_components()
+                        if any([c not in self.path[-1] for c in cpids]):
+                            continue
                     ans = cpn.run(self.history, **kwargs)
                     self.path[-1].append(c)
-                ran += 1
+            ran += 1
 
         prepare2run(self.components[self.path[-2][-1]]["downstream"])
-        while ran < len(self.path[-1]):
+        while 0 <= ran < len(self.path[-1]):
             if DEBUG: print(ran, self.path)
             cpn_id = self.path[-1][ran]
             cpn = self.get_component(cpn_id)
             if not cpn["downstream"]: break
+
+            loop = self._find_loop()
+            if loop: raise OverflowError(f"Too much loops: {loop}")
 
             if cpn["obj"].component_name.lower() in ["switch", "categorize", "relevant"]:
                 switch_out = cpn["obj"].output()[1].iloc[0, 0]
@@ -195,6 +225,7 @@ class Canvas(ABC):
                             prepare2run([p])
                             break
                     traceback.print_exc()
+                    break
                 continue
 
             try:
@@ -206,6 +237,7 @@ class Canvas(ABC):
                         prepare2run([p])
                         break
                 traceback.print_exc()
+                break
 
         if self.answer:
             cpn_id = self.answer[0]
@@ -241,3 +273,30 @@ class Canvas(ABC):
 
     def get_embedding_model(self):
         return self._embed_id
+
+    def _find_loop(self, max_loops=2):
+        path = self.path[-1][::-1]
+        if len(path) < 2: return False
+
+        for i in range(len(path)):
+            if path[i].lower().find("answer") >= 0:
+                path = path[:i]
+                break
+
+        if len(path) < 2: return False
+
+        for l in range(2, len(path) // 2):
+            pat = ",".join(path[0:l])
+            path_str = ",".join(path)
+            if len(pat) >= len(path_str): return False
+            loop = max_loops
+            while path_str.find(pat) == 0 and loop >= 0:
+                loop -= 1
+                if len(pat)+1 >= len(path_str):
+                    return False
+                path_str = path_str[len(pat)+1:]
+            if loop < 0:
+                pat = " => ".join([p.split(":")[0] for p in path[0:l]])
+                return pat + " => " + pat
+
+        return False

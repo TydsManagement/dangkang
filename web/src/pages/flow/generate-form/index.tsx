@@ -1,61 +1,35 @@
-import LlmSettingItems from '@/components/llm-setting-items';
-import { variableEnabledFieldMap } from '@/constants/chat';
-import {
-  ModelVariableType,
-  settledModelVariableMap,
-} from '@/constants/knowledge';
-import { useTranslate } from '@/hooks/commonHooks';
-import { Variable } from '@/interfaces/database/chat';
-import { Form, Input, Switch } from 'antd';
-import { useCallback, useEffect } from 'react';
+import LLMSelect from '@/components/llm-select';
+import { useTranslate } from '@/hooks/common-hooks';
+import { Form, Input, InputNumber, Switch } from 'antd';
+import { useSetLlmSetting } from '../hooks';
 import { IOperatorForm } from '../interface';
+import DynamicParameters from './dynamic-parameters';
 
-const GenerateForm = ({ onValuesChange, form }: IOperatorForm) => {
+const GenerateForm = ({ onValuesChange, form, node }: IOperatorForm) => {
   const { t } = useTranslate('flow');
-  const initialLlmSetting = undefined;
 
-  const handleParametersChange = useCallback(
-    (value: ModelVariableType) => {
-      const variable = settledModelVariableMap[value];
-      form?.setFieldsValue(variable);
-    },
-    [form],
-  );
-
-  useEffect(() => {
-    const switchBoxValues = Object.keys(variableEnabledFieldMap).reduce<
-      Record<string, boolean>
-    >((pre, field) => {
-      pre[field] =
-        initialLlmSetting === undefined
-          ? true
-          : !!initialLlmSetting[
-              variableEnabledFieldMap[
-                field as keyof typeof variableEnabledFieldMap
-              ] as keyof Variable
-            ];
-      return pre;
-    }, {});
-    const otherValues = settledModelVariableMap[ModelVariableType.Precise];
-    form?.setFieldsValue({ ...switchBoxValues, ...otherValues });
-  }, [form, initialLlmSetting]);
+  useSetLlmSetting(form);
 
   return (
     <Form
       name="basic"
-      labelCol={{ span: 9 }}
-      wrapperCol={{ span: 15 }}
+      labelCol={{ span: 10 }}
+      wrapperCol={{ span: 14 }}
       autoComplete="off"
       form={form}
       onValuesChange={onValuesChange}
     >
-      <LlmSettingItems
-        handleParametersChange={handleParametersChange}
-      ></LlmSettingItems>
+      <Form.Item
+        name={'llm_id'}
+        label={t('model', { keyPrefix: 'chat' })}
+        tooltip={t('modelTip', { keyPrefix: 'chat' })}
+      >
+        <LLMSelect></LLMSelect>
+      </Form.Item>
       <Form.Item
         name={['prompt']}
         label={t('prompt', { keyPrefix: 'knowledgeConfiguration' })}
-        initialValue={t('promptText', { keyPrefix: 'knowledgeConfiguration' })}
+        initialValue={t('promptText')}
         tooltip={t('promptTip', { keyPrefix: 'knowledgeConfiguration' })}
         rules={[
           {
@@ -75,6 +49,15 @@ const GenerateForm = ({ onValuesChange, form }: IOperatorForm) => {
       >
         <Switch />
       </Form.Item>
+      <Form.Item
+        name={'message_history_window_size'}
+        label={t('messageHistoryWindowSize')}
+        initialValue={12}
+        tooltip={t('messageHistoryWindowSizeTip')}
+      >
+        <InputNumber style={{ width: '100%' }} />
+      </Form.Item>
+      <DynamicParameters nodeId={node?.id}></DynamicParameters>
     </Form>
   );
 };

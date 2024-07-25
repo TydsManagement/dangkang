@@ -19,7 +19,7 @@ import json
 import os
 from copy import deepcopy
 from functools import partial
-from typing import List, Dict
+from typing import List, Dict, Tuple, Union
 
 import pandas as pd
 
@@ -35,7 +35,7 @@ _IS_RAW_CONF = "_is_raw_conf"
 class ComponentParamBase(ABC):
     def __init__(self):
         self.output_var_name = "output"
-        self.message_history_window_size = 4
+        self.message_history_window_size = 22
 
     def set_name(self, name: str):
         self._name = name
@@ -246,7 +246,7 @@ class ComponentParamBase(ABC):
     def check_empty(param, descr):
         if not param:
             raise ValueError(
-                descr + " {} not supported empty value."
+                descr + " does not support empty value."
             )
 
     @staticmethod
@@ -411,12 +411,26 @@ class ComponentBase(ABC):
     def _run(self, history, **kwargs):
         raise NotImplementedError()
 
-    def output(self) -> pd.DataFrame:
+    def output(self, allow_partial=True) -> Tuple[str, Union[pd.DataFrame, partial]]:
         o = getattr(self._param, self._param.output_var_name)
         if not isinstance(o, partial) and not isinstance(o, pd.DataFrame):
             if not isinstance(o, list): o = [o]
             o = pd.DataFrame(o)
-        return self._param.output_var_name, o
+
+        if allow_partial or not isinstance(o, partial):
+            if not isinstance(o, partial) and not isinstance(o, pd.DataFrame):
+                return pd.DataFrame(o if isinstance(o, list) else [o])
+            return self._param.output_var_name, o
+
+        outs = None
+        for oo in o():
+            if not isinstance(oo, pd.DataFrame):
+                outs = pd.DataFrame(oo if isinstance(oo, list) else [oo])
+            else: outs = oo
+        return self._param.output_var_name, outs
+
+    def reset(self):
+        setattr(self._param, self._param.output_var_name, None)
 
     def set_output(self, v: pd.DataFrame):
         setattr(self._param, self._param.output_var_name, v)
@@ -431,6 +445,12 @@ class ComponentBase(ABC):
         if DEBUG: print(self.component_name, reversed_cpnts[::-1])
         for u in reversed_cpnts[::-1]:
             if self.get_component_name(u) in ["switch"]: continue
+            if self.component_name.lower() == "generate" and self.get_component_name(u) == "retrieval":
+                o = self._canvas.get_component(u)["obj"].output(allow_partial=False)[1]
+                if o is not None:
+                    upstream_outs.append(o)
+                    continue
+            if u not in self._canvas.get_component(self._id)["upstream"]: continue
             if self.component_name.lower().find("switch") < 0 \
                     and self.get_component_name(u) in ["relevant", "categorize"]:
                 continue
@@ -441,12 +461,20 @@ class ComponentBase(ABC):
                         break
                 break
             if self.component_name.lower().find("answer") >= 0:
-                if self.get_component_name(u) in ["relevant"]: continue
-
-            upstream_outs.append(self._canvas.get_component(u)["obj"].output()[1])
+                if self.get_component_name(u) in ["relevant"]:
+                    continue
+            else:
+                o = self._canvas.get_component(u)["obj"].output(allow_partial=False)[1]
+                if o is not None:
+                    upstream_outs.append(o)
             break
 
-        return pd.concat(upstream_outs, ignore_index=False)
+        if upstream_outs:
+            df = pd.concat(upstream_outs, ignore_index=True)
+            if "content" in df:
+                df = df.drop_duplicates(subset=['content']).reset_index(drop=True)
+            return df
+        return pd.DataFrame()
 
     def get_stream_input(self):
         reversed_cpnts = []

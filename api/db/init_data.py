@@ -1,18 +1,3 @@
-#
-#  Copyright 2024 The InfiniFlow Authors. All Rights Reserved.
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
 import os
 import time
 import uuid
@@ -21,11 +6,13 @@ from copy import deepcopy
 from api.db import LLMType, UserTenantRole
 from api.db.db_models import init_database_tables as init_web_db, LLMFactories, LLM, TenantLLM
 from api.db.services import UserService
+from api.db.services.canvas_service import CanvasTemplateService
 from api.db.services.document_service import DocumentService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.llm_service import LLMFactoriesService, LLMService, TenantLLMService, LLMBundle
 from api.db.services.user_service import TenantService, UserTenantService
 from api.settings import CHAT_MDL, EMBEDDING_MDL, ASR_MDL, IMAGE2TEXT_MDL, PARSERS, LLM_FACTORY, API_KEY, LLM_BASE_URL
+from api.utils.file_utils import get_project_base_directory
 
 
 def init_superuser():
@@ -86,577 +73,30 @@ def init_superuser():
                 tenant["embd_id"]))
 
 
-factory_infos = [{
-    "name": "OpenAI",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING,SPEECH2TEXT,MODERATION",
-    "status": "1",
-}, {
-    "name": "Tongyi-Qianwen",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING,SPEECH2TEXT,MODERATION",
-    "status": "1",
-}, {
-    "name": "ZHIPU-AI",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING,SPEECH2TEXT,MODERATION",
-    "status": "1",
-},
-    {
-    "name": "Ollama",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING,SPEECH2TEXT,MODERATION",
-        "status": "1",
-}, {
-    "name": "Moonshot",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING",
-    "status": "1",
-}, {
-    "name": "FastEmbed",
-    "logo": "",
-    "tags": "TEXT EMBEDDING",
-    "status": "1",
-}, {
-    "name": "Xinference",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING,SPEECH2TEXT,MODERATION",
-        "status": "1",
-},{
-    "name": "Youdao",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING,SPEECH2TEXT,MODERATION",
-    "status": "1",
-},{
-    "name": "DeepSeek",
-    "logo": "",
-    "tags": "LLM",
-    "status": "1",
-},{
-    "name": "VolcEngine",
-    "logo": "",
-    "tags": "LLM, TEXT EMBEDDING",
-    "status": "1",
-},{
-    "name": "BaiChuan",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING",
-    "status": "1",
-},{
-    "name": "Jina",
-    "logo": "",
-    "tags": "TEXT EMBEDDING, TEXT RE-RANK",
-    "status": "1",
-},{
-    "name": "BAAI",
-    "logo": "",
-    "tags": "TEXT EMBEDDING, TEXT RE-RANK",
-    "status": "1",
-},{
-    "name": "Minimax",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING",
-    "status": "1",
-},{
-    "name": "Mistral",
-    "logo": "",
-    "tags": "LLM,TEXT EMBEDDING",
-    "status": "1",
-}
-    # {
-    #     "name": "文心一言",
-    #     "logo": "",
-    #     "tags": "LLM,TEXT EMBEDDING,SPEECH2TEXT,MODERATION",
-    #     "status": "1",
-    # },
-]
-
-
 def init_llm_factory():
-    llm_infos = [
-        # ---------------------- OpenAI ------------------------
-        {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "gpt-4o",
-            "tags": "LLM,CHAT,128K",
-            "max_tokens": 128000,
-            "model_type": LLMType.CHAT.value + "," + LLMType.IMAGE2TEXT.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "gpt-3.5-turbo",
-            "tags": "LLM,CHAT,4K",
-            "max_tokens": 4096,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "gpt-3.5-turbo-16k-0613",
-            "tags": "LLM,CHAT,16k",
-            "max_tokens": 16385,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "text-embedding-ada-002",
-            "tags": "TEXT EMBEDDING,8K",
-            "max_tokens": 8191,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "text-embedding-3-small",
-            "tags": "TEXT EMBEDDING,8K",
-            "max_tokens": 8191,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "text-embedding-3-large",
-            "tags": "TEXT EMBEDDING,8K",
-            "max_tokens": 8191,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "whisper-1",
-            "tags": "SPEECH2TEXT",
-            "max_tokens": 25 * 1024 * 1024,
-            "model_type": LLMType.SPEECH2TEXT.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "gpt-4",
-            "tags": "LLM,CHAT,8K",
-            "max_tokens": 8191,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "gpt-4-turbo",
-            "tags": "LLM,CHAT,8K",
-            "max_tokens": 8191,
-            "model_type": LLMType.CHAT.value
-        },{
-            "fid": factory_infos[0]["name"],
-            "llm_name": "gpt-4-32k",
-            "tags": "LLM,CHAT,32K",
-            "max_tokens": 32768,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[0]["name"],
-            "llm_name": "gpt-4-vision-preview",
-            "tags": "LLM,CHAT,IMAGE2TEXT",
-            "max_tokens": 765,
-            "model_type": LLMType.IMAGE2TEXT.value
-        },
-        # ----------------------- Qwen -----------------------
-        {
-            "fid": factory_infos[1]["name"],
-            "llm_name": "qwen-turbo",
-            "tags": "LLM,CHAT,8K",
-            "max_tokens": 8191,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[1]["name"],
-            "llm_name": "qwen-plus",
-            "tags": "LLM,CHAT,32K",
-            "max_tokens": 32768,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[1]["name"],
-            "llm_name": "qwen-max-1201",
-            "tags": "LLM,CHAT,6K",
-            "max_tokens": 5899,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[1]["name"],
-            "llm_name": "text-embedding-v2",
-            "tags": "TEXT EMBEDDING,2K",
-            "max_tokens": 2048,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[1]["name"],
-            "llm_name": "paraformer-realtime-8k-v1",
-            "tags": "SPEECH2TEXT",
-            "max_tokens": 25 * 1024 * 1024,
-            "model_type": LLMType.SPEECH2TEXT.value
-        }, {
-            "fid": factory_infos[1]["name"],
-            "llm_name": "qwen-vl-max",
-            "tags": "LLM,CHAT,IMAGE2TEXT",
-            "max_tokens": 765,
-            "model_type": LLMType.IMAGE2TEXT.value
-        },
-        # ---------------------- ZhipuAI ----------------------
-        {
-            "fid": factory_infos[2]["name"],
-            "llm_name": "glm-3-turbo",
-            "tags": "LLM,CHAT,",
-            "max_tokens": 128 * 1000,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[2]["name"],
-            "llm_name": "glm-4",
-            "tags": "LLM,CHAT,",
-            "max_tokens": 128 * 1000,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[2]["name"],
-            "llm_name": "glm-4v",
-            "tags": "LLM,CHAT,IMAGE2TEXT",
-            "max_tokens": 2000,
-            "model_type": LLMType.IMAGE2TEXT.value
-        },
-        {
-            "fid": factory_infos[2]["name"],
-            "llm_name": "embedding-2",
-            "tags": "TEXT EMBEDDING",
-            "max_tokens": 512,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        # ------------------------ Moonshot -----------------------
-        {
-            "fid": factory_infos[4]["name"],
-            "llm_name": "moonshot-v1-8k",
-            "tags": "LLM,CHAT,",
-            "max_tokens": 7900,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[4]["name"],
-            "llm_name": "moonshot-v1-32k",
-            "tags": "LLM,CHAT,",
-            "max_tokens": 32768,
-            "model_type": LLMType.CHAT.value
-        }, {
-            "fid": factory_infos[4]["name"],
-            "llm_name": "moonshot-v1-128k",
-            "tags": "LLM,CHAT",
-            "max_tokens": 128 * 1000,
-            "model_type": LLMType.CHAT.value
-        },
-        # ------------------------ FastEmbed -----------------------
-        {
-            "fid": factory_infos[5]["name"],
-            "llm_name": "BAAI/bge-small-en-v1.5",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 512,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[5]["name"],
-            "llm_name": "BAAI/bge-small-zh-v1.5",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 512,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-        }, {
-            "fid": factory_infos[5]["name"],
-            "llm_name": "BAAI/bge-base-en-v1.5",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 512,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-        }, {
-            "fid": factory_infos[5]["name"],
-            "llm_name": "BAAI/bge-large-en-v1.5",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 512,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[5]["name"],
-            "llm_name": "sentence-transformers/all-MiniLM-L6-v2",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 512,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[5]["name"],
-            "llm_name": "nomic-ai/nomic-embed-text-v1.5",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 8192,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[5]["name"],
-            "llm_name": "jinaai/jina-embeddings-v2-small-en",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 2147483648,
-            "model_type": LLMType.EMBEDDING.value
-        }, {
-            "fid": factory_infos[5]["name"],
-            "llm_name": "jinaai/jina-embeddings-v2-base-en",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 2147483648,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        # ------------------------ Youdao -----------------------
-        {
-            "fid": factory_infos[7]["name"],
-            "llm_name": "maidalun1020/bce-embedding-base_v1",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 512,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        {
-            "fid": factory_infos[7]["name"],
-            "llm_name": "maidalun1020/bce-reranker-base_v1",
-            "tags": "RE-RANK, 512",
-            "max_tokens": 512,
-            "model_type": LLMType.RERANK.value
-        },
-        # ------------------------ DeepSeek -----------------------
-        {
-            "fid": factory_infos[8]["name"],
-            "llm_name": "deepseek-chat",
-            "tags": "LLM,CHAT,",
-            "max_tokens": 32768,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[8]["name"],
-            "llm_name": "deepseek-coder",
-            "tags": "LLM,CHAT,",
-            "max_tokens": 16385,
-            "model_type": LLMType.CHAT.value
-        },
-        # ------------------------ VolcEngine -----------------------
-        {
-            "fid": factory_infos[9]["name"],
-            "llm_name": "Skylark2-pro-32k",
-            "tags": "LLM,CHAT,32k",
-            "max_tokens": 32768,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[9]["name"],
-            "llm_name": "Skylark2-pro-4k",
-            "tags": "LLM,CHAT,4k",
-            "max_tokens": 4096,
-            "model_type": LLMType.CHAT.value
-        },
-        # ------------------------ BaiChuan -----------------------
-        {
-            "fid": factory_infos[10]["name"],
-            "llm_name": "Baichuan2-Turbo",
-            "tags": "LLM,CHAT,32K",
-            "max_tokens": 32768,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[10]["name"],
-            "llm_name": "Baichuan2-Turbo-192k",
-            "tags": "LLM,CHAT,192K",
-            "max_tokens": 196608,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[10]["name"],
-            "llm_name": "Baichuan3-Turbo",
-            "tags": "LLM,CHAT,32K",
-            "max_tokens": 32768,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[10]["name"],
-            "llm_name": "Baichuan3-Turbo-128k",
-            "tags": "LLM,CHAT,128K",
-            "max_tokens": 131072,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[10]["name"],
-            "llm_name": "Baichuan4",
-            "tags": "LLM,CHAT,128K",
-            "max_tokens": 131072,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[10]["name"],
-            "llm_name": "Baichuan-Text-Embedding",
-            "tags": "TEXT EMBEDDING",
-            "max_tokens": 512,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        # ------------------------ Jina -----------------------
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-reranker-v1-base-en",
-            "tags": "RE-RANK,8k",
-            "max_tokens": 8196,
-            "model_type": LLMType.RERANK.value
-        },
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-reranker-v1-turbo-en",
-            "tags": "RE-RANK,8k",
-            "max_tokens": 8196,
-            "model_type": LLMType.RERANK.value
-        },
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-reranker-v1-tiny-en",
-            "tags": "RE-RANK,8k",
-            "max_tokens": 8196,
-            "model_type": LLMType.RERANK.value
-        },
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-colbert-v1-en",
-            "tags": "RE-RANK,8k",
-            "max_tokens": 8196,
-            "model_type": LLMType.RERANK.value
-        },
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-embeddings-v2-base-en",
-            "tags": "TEXT EMBEDDING",
-            "max_tokens": 8196,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-embeddings-v2-base-de",
-            "tags": "TEXT EMBEDDING",
-            "max_tokens": 8196,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-embeddings-v2-base-es",
-            "tags": "TEXT EMBEDDING",
-            "max_tokens": 8196,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-embeddings-v2-base-code",
-            "tags": "TEXT EMBEDDING",
-            "max_tokens": 8196,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        {
-            "fid": factory_infos[11]["name"],
-            "llm_name": "jina-embeddings-v2-base-zh",
-            "tags": "TEXT EMBEDDING",
-            "max_tokens": 8196,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        # ------------------------ BAAI -----------------------
-        {
-            "fid": factory_infos[12]["name"],
-            "llm_name": "BAAI/bge-large-zh-v1.5",
-            "tags": "TEXT EMBEDDING,",
-            "max_tokens": 1024,
-            "model_type": LLMType.EMBEDDING.value
-        },
-        {
-            "fid": factory_infos[12]["name"],
-            "llm_name": "BAAI/bge-reranker-v2-m3",
-            "tags": "RE-RANK,2k",
-            "max_tokens": 2048,
-            "model_type": LLMType.RERANK.value
-        },
-        # ------------------------ Minimax -----------------------
-        {
-            "fid": factory_infos[13]["name"],
-            "llm_name": "abab6.5-chat",
-            "tags": "LLM,CHAT,8k",
-            "max_tokens": 8192,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[13]["name"],
-            "llm_name": "abab6.5s-chat",
-            "tags": "LLM,CHAT,245k",
-            "max_tokens": 245760,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[13]["name"],
-            "llm_name": "abab6.5t-chat",
-            "tags": "LLM,CHAT,8k",
-            "max_tokens": 8192,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[13]["name"],
-            "llm_name": "abab6.5g-chat",
-            "tags": "LLM,CHAT,8k",
-            "max_tokens": 8192,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[13]["name"],
-            "llm_name": "abab5.5-chat",
-            "tags": "LLM,CHAT,16k",
-            "max_tokens": 16384,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[13]["name"],
-            "llm_name": "abab5.5s-chat",
-            "tags": "LLM,CHAT,8k",
-            "max_tokens": 8192,
-            "model_type": LLMType.CHAT.value
-        },
-        # ------------------------ Mistral -----------------------
-        {
-            "fid": factory_infos[14]["name"],
-            "llm_name": "open-mixtral-8x22b",
-            "tags": "LLM,CHAT,64k",
-            "max_tokens": 64000,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[14]["name"],
-            "llm_name": "open-mixtral-8x7b",
-            "tags": "LLM,CHAT,32k",
-            "max_tokens": 32000,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[14]["name"],
-            "llm_name": "open-mistral-7b",
-            "tags": "LLM,CHAT,32k",
-            "max_tokens": 32000,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[14]["name"],
-            "llm_name": "mistral-large-latest",
-            "tags": "LLM,CHAT,32k",
-            "max_tokens": 32000,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[14]["name"],
-            "llm_name": "mistral-small-latest",
-            "tags": "LLM,CHAT,32k",
-            "max_tokens": 32000,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[14]["name"],
-            "llm_name": "mistral-medium-latest",
-            "tags": "LLM,CHAT,32k",
-            "max_tokens": 32000,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[14]["name"],
-            "llm_name": "codestral-latest",
-            "tags": "LLM,CHAT,32k",
-            "max_tokens": 32000,
-            "model_type": LLMType.CHAT.value
-        },
-        {
-            "fid": factory_infos[14]["name"],
-            "llm_name": "mistral-embed",
-            "tags": "LLM,CHAT,8k",
-            "max_tokens": 8192,
-            "model_type": LLMType.EMBEDDING
-        },
-    ]
-    for info in factory_infos:
+    try:
+        LLMService.filter_delete([(LLM.fid == "MiniMax" or LLM.fid == "Minimax")])
+    except Exception as e:
+        pass
+
+    factory_llm_infos = json.load(
+        open(
+            os.path.join(get_project_base_directory(), "conf", "llm_factories.json"),
+            "r",
+        )
+    )
+    for factory_llm_info in factory_llm_infos["factory_llm_infos"]:
+        llm_infos = factory_llm_info.pop("llm")
         try:
-            LLMFactoriesService.save(**info)
+            LLMFactoriesService.save(**factory_llm_info)
         except Exception as e:
             pass
-    for info in llm_infos:
-        try:
-            LLMService.save(**info)
-        except Exception as e:
-            pass
+        for llm_info in llm_infos:
+            llm_info["fid"] = factory_llm_info["name"]
+            try:
+                LLMService.save(**llm_info)
+            except Exception as e:
+                pass
 
     LLMFactoriesService.filter_delete([LLMFactories.name == "Local"])
     LLMService.filter_delete([LLM.fid == "Local"])
@@ -665,6 +105,8 @@ def init_llm_factory():
     LLMFactoriesService.filter_delete([LLMFactoriesService.model.name == "QAnything"])
     LLMService.filter_delete([LLMService.model.fid == "QAnything"])
     TenantLLMService.filter_update([TenantLLMService.model.llm_factory == "QAnything"], {"llm_factory": "Youdao"})
+    TenantService.filter_update([1 == 1], {
+        "parser_ids": "naive:General,qa:Q&A,resume:Resume,manual:Manual,table:Table,paper:Paper,book:Book,laws:Laws,presentation:Presentation,picture:Picture,one:One,audio:Audio"})
     ## insert openai two embedding models to the current openai user.
     print("Start to insert 2 OpenAI embedding models...")
     tenant_ids = set([row["tenant_id"] for row in TenantLLMService.get_openai_models()])
@@ -687,11 +129,25 @@ def init_llm_factory():
     """
     drop table llm;
     drop table llm_factories;
-    update tenant set parser_ids='naive:General,qa:Q&A,resume:Resume,manual:Manual,table:Table,paper:Paper,book:Book,laws:Laws,presentation:Presentation,picture:Picture,one:One';
+    update tenant set parser_ids='naive:General,qa:Q&A,resume:Resume,manual:Manual,table:Table,paper:Paper,book:Book,laws:Laws,presentation:Presentation,picture:Picture,one:One,audio:Audio';
     alter table knowledgebase modify avatar longtext;
     alter table user modify avatar longtext;
     alter table dialog modify icon longtext;
     """
+
+
+def add_graph_templates():
+    dir = os.path.join(get_project_base_directory(), "graph", "templates")
+    for fnm in os.listdir(dir):
+        try:
+            cnvs = json.load(open(os.path.join(dir, fnm), "r"))
+            try:
+                CanvasTemplateService.save(**cnvs)
+            except:
+                CanvasTemplateService.update_by_id(cnvs["id"], cnvs)
+        except Exception as e:
+            print("Add graph templates error: ", e)
+            print("------------", flush=True)
 
 
 def init_web_data():
@@ -701,6 +157,7 @@ def init_web_data():
     if not UserService.get_all().count():
         init_superuser()
 
+    add_graph_templates()
     print("init web data success:{}".format(time.time() - start_time))
 
 

@@ -229,3 +229,78 @@ class YoudaoRerank(DefaultRerank):
 
         # 将所有批次的相似度分数合并成一个numpy数组，并返回总令牌数
         return np.array(res), token_count
+
+
+class XInferenceRerank(Base):
+    def __init__(self, key="xxxxxxx", model_name="", base_url=""):
+        self.model_name = model_name
+        self.base_url = base_url
+        self.headers = {
+            "Content-Type": "application/json",
+            "accept": "application/json"
+        }
+
+    def similarity(self, query: str, texts: list):
+        data = {
+            "model": self.model_name,
+            "query": query,
+            "return_documents": "true",
+            "return_len": "true",
+            "documents": texts
+        }
+        res = requests.post(self.base_url, headers=self.headers, json=data).json()
+        return np.array([d["relevance_score"] for d in res["results"]]), res["meta"]["tokens"]["input_tokens"]+res["meta"]["tokens"]["output_tokens"]
+
+
+class LocalAIRerank(Base):
+    def __init__(self, key, model_name, base_url):
+        pass
+
+    def similarity(self, query: str, texts: list):
+        raise NotImplementedError("The LocalAIRerank has not been implement")
+
+
+class NvidiaRerank(Base):
+    def __init__(
+        self, key, model_name, base_url="https://ai.api.nvidia.com/v1/retrieval/nvidia/"
+    ):
+        if not base_url:
+            base_url = "https://ai.api.nvidia.com/v1/retrieval/nvidia/"
+        self.model_name = model_name
+
+        if self.model_name == "nvidia/nv-rerankqa-mistral-4b-v3":
+            self.base_url = os.path.join(
+                base_url, "nv-rerankqa-mistral-4b-v3", "reranking"
+            )
+
+        if self.model_name == "nvidia/rerank-qa-mistral-4b":
+            self.base_url = os.path.join(base_url, "reranking")
+            self.model_name = "nv-rerank-qa-mistral-4b:1"
+
+        self.headers = {
+            "accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        }
+
+    def similarity(self, query: str, texts: list):
+        token_count = num_tokens_from_string(query) + sum(
+            [num_tokens_from_string(t) for t in texts]
+        )
+        data = {
+            "model": self.model_name,
+            "query": {"text": query},
+            "passages": [{"text": text} for text in texts],
+            "truncate": "END",
+            "top_n": len(texts),
+        }
+        res = requests.post(self.base_url, headers=self.headers, json=data).json()
+        return (np.array([d["logit"] for d in res["rankings"]]), token_count)
+
+
+class LmStudioRerank(Base):
+    def __init__(self, key, model_name, base_url):
+        pass
+
+    def similarity(self, query: str, texts: list):
+        raise NotImplementedError("The LmStudioRerank has not been implement")

@@ -6,7 +6,7 @@ export type DSLComponents = Record<string, IOperator>;
 export interface DSL {
   components: DSLComponents;
   history: any[];
-  path?: string[];
+  path?: string[][];
   answer?: any[];
   graph?: IGraph;
   messages: Message[];
@@ -41,4 +41,17 @@ export interface IFlow {
   update_date: string;
   update_time: number;
   user_id: string;
+}
+
+export interface IFlowTemplate {
+  avatar: string;
+  canvas_type: string;
+  create_date: string;
+  create_time: number;
+  description: string;
+  dsl: DSL;
+  id: string;
+  title: string;
+  update_date: string;
+  update_time: number;
 }

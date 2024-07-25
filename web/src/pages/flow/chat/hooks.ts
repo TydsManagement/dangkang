@@ -4,7 +4,7 @@ import {
   useHandleMessageInputChange,
   useScrollToBottom,
   useSendMessageWithSse,
-} from '@/hooks/logicHooks';
+} from '@/hooks/logic-hooks';
 import { IAnswer } from '@/interfaces/database/chat';
 import { IMessage } from '@/pages/chat/interface';
 import api from '@/utils/api';
@@ -12,6 +12,7 @@ import { message } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'umi';
 import { v4 as uuid } from 'uuid';
+import { receiveMessageError } from '../utils';
 
 const antMessage = message;
 
@@ -48,19 +49,15 @@ export const useSelectCurrentMessages = () => {
 
   const addNewestAnswer = useCallback((answer: IAnswer) => {
     setCurrentMessages((pre) => {
-      const latestMessage = pre?.at(-1);
-
-      if (latestMessage) {
-        return [
-          ...pre.slice(0, -1),
-          {
-            ...latestMessage,
-            content: answer.answer,
-            reference: answer.reference,
-          },
-        ];
-      }
-      return pre;
+      return [
+        ...pre.slice(0, -1),
+        {
+          id: uuid(),
+          role: MessageType.Assistant,
+          content: answer.answer,
+          reference: answer.reference,
+        },
+      ];
     });
   }, []);
 
@@ -97,13 +94,12 @@ export const useSendMessage = (
 ) => {
   const { id: flowId } = useParams();
   const { handleInputChange, value, setValue } = useHandleMessageInputChange();
-  const { data: flowDetail } = useFetchFlow();
-  const messages = flowDetail.dsl.messages;
+  const { refetch } = useFetchFlow();
 
   const { send, answer, done } = useSendMessageWithSse(api.runCanvas);
 
   const sendMessage = useCallback(
-    async (message: string, id?: string) => {
+    async (message: string) => {
       const params: Record<string, unknown> = {
         id: flowId,
       };
@@ -112,15 +108,17 @@ export const useSendMessage = (
       }
       const res = await send(params);
 
-      if (res && (res?.response.status !== 200 || res?.data?.retcode !== 0)) {
+      if (receiveMessageError(res)) {
         antMessage.error(res?.data?.retmsg);
 
         // cancel loading
         setValue(message);
         removeLatestMessage();
+      } else {
+        refetch(); // pull the message list after sending the message successfully
       }
     },
-    [flowId, removeLatestMessage, setValue, send],
+    [flowId, removeLatestMessage, setValue, send, refetch],
   );
 
   const handleSendMessage = useCallback(
@@ -135,13 +133,6 @@ export const useSendMessage = (
       addNewestAnswer(answer);
     }
   }, [answer, addNewestAnswer]);
-
-  useEffect(() => {
-    // fetch prologue
-    if (messages.length === 0) {
-      sendMessage('');
-    }
-  }, [sendMessage, messages]);
 
   const handlePressEnter = useCallback(() => {
     if (done) {

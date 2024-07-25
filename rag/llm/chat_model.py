@@ -1,34 +1,47 @@
-#
-#  Copyright 2024 The InfiniFlow Authors. All Rights Reserved.
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
+# 导入AzureOpenAI类，用于与Azure OpenAI服务进行交互
 from openai.lib.azure import AzureOpenAI
+# 导入ZhipuAI类，用于访问智谱AI的相关功能
 from zhipuai import ZhipuAI
+# 导入Generation类，用于调用达观智能的文本生成服务
 from dashscope import Generation
+# 导入ABC类，作为抽象基类，提供通用的接口或方法
 from abc import ABC
+# 导入OpenAI类和openai模块，用于与OpenAI平台进行交互
 from openai import OpenAI
 import openai
+# 导入Client类，用于访问Ollama聊天机器人服务
 from ollama import Client
+# 导入MaasService类，用于访问火山引擎的机器学习即服务（MaaS）
 from volcengine.maas.v2 import MaasService
+# 导入is_english函数，用于判断文本是否为英文
 from rag.nlp import is_english
+# 导入num_tokens_from_string函数，用于计算字符串中的令牌数量
 from rag.utils import num_tokens_from_string
-
+from groq import Groq
+import json
+import requests
 
 class Base(ABC):
     def __init__(self, key, model_name, base_url):
+        """
+        初始化 OpenAI 客户端对象并设置模型名称。
+
+        该构造函数用于创建一个针对特定 OpenAI 模型的客户端实例。
+        它允许用户通过提供的 API 密钥和模型名称来访问和使用 OpenAI 服务。
+
+        参数:
+        key (str): 用户的 OpenAI API 密钥，用于身份验证和访问服务。
+        model_name (str): 指定要使用的 OpenAI 模型的名称，用于调用特定模型的功能。
+        base_url (str): OpenAI 服务的基 URL，用于指定 API 调用的端点。
+
+        返回:
+        None
+        """
+        # 初始化 OpenAI 客户端，使用提供的 API 密钥和基础URL
         self.client = OpenAI(api_key=key, base_url=base_url)
+        # 设置模型名称，用于后续调用特定模型
         self.model_name = model_name
+
 
     def chat(self, system, history, gen_conf):
         if system:
@@ -86,7 +99,20 @@ class MoonshotChat(Base):
 
 class XinferenceChat(Base):
     def __init__(self, key=None, model_name="", base_url=""):
+        """
+        初始化函数，用于创建类的实例。
+
+        参数:
+        key (Optional[str]): API密钥，用于访问某些在线服务。默认为None。
+        model_name (str): 模型名称，用于标识特定的模型。默认为空字符串。
+        base_url (str): API的基础URL，用于构建请求的地址。默认为空字符串。
+
+        注意:
+        这里将`key`参数重新赋值为"xxx"，是为了隐藏真实的密钥信息，实际使用时应根据具体情况修改。
+        """
+        # 由于实际开发中密钥信息不应公开，这里使用"xxx"代替真实密钥
         key = "xxx"
+        # 调用父类的初始化函数，传入修改后的key以及其他参数
         super().__init__(key, model_name, base_url)
 
 
@@ -406,6 +432,82 @@ class OllamaChat(Base):
             yield 0
 
 
+class LocalAIChat(Base):
+    def __init__(self, key, model_name, base_url):
+        if base_url[-1] == "/":
+            base_url = base_url[:-1]
+        self.base_url = base_url + "/v1/chat/completions"
+        self.model_name = model_name.split("___")[0]
+
+    def chat(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "system", "content": system})
+        for k in list(gen_conf.keys()):
+            if k not in ["temperature", "top_p", "max_tokens"]:
+                del gen_conf[k]
+        headers = {
+            "Content-Type": "application/json",
+        }
+        payload = json.dumps(
+            {"model": self.model_name, "messages": history, **gen_conf}
+        )
+        try:
+            response = requests.request(
+                "POST", url=self.base_url, headers=headers, data=payload
+            )
+            response = response.json()
+            ans = response["choices"][0]["message"]["content"].strip()
+            if response["choices"][0]["finish_reason"] == "length":
+                ans += (
+                    "...\nFor the content length reason, it stopped, continue?"
+                    if is_english([ans])
+                    else "······\n由于长度的原因，回答被截断了，要继续吗？"
+                )
+            return ans, response["usage"]["total_tokens"]
+        except Exception as e:
+            return "**ERROR**: " + str(e), 0
+
+    def chat_streamly(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "system", "content": system})
+        ans = ""
+        total_tokens = 0
+        try:
+            headers = {
+                "Content-Type": "application/json",
+            }
+            payload = json.dumps(
+                {
+                    "model": self.model_name,
+                    "messages": history,
+                    "stream": True,
+                    **gen_conf,
+                }
+            )
+            response = requests.request(
+                "POST",
+                url=self.base_url,
+                headers=headers,
+                data=payload,
+            )
+            for resp in response.content.decode("utf-8").split("\n\n"):
+                if "choices" not in resp:
+                    continue
+                resp = json.loads(resp[6:])
+                if "delta" in resp["choices"][0]:
+                    text = resp["choices"][0]["delta"]["content"]
+                else:
+                    continue
+                ans += text
+                total_tokens += 1
+            yield ans
+
+        except Exception as e:
+            yield ans + "\n**ERROR**: " + str(e)
+
+        yield total_tokens
+
+
 class LocalLLM(Base):
     class RPCProxy:
         def __init__(self, host, port):
@@ -534,11 +636,82 @@ class VolcEngineChat(Base):
 
 
 class MiniMaxChat(Base):
-    def __init__(self, key, model_name="abab6.5s-chat",
-                 base_url="https://api.minimax.chat/v1/text/chatcompletion_v2"):
+    def __init__(
+        self,
+        key,
+        model_name,
+        base_url="https://api.minimax.chat/v1/text/chatcompletion_v2",
+    ):
         if not base_url:
-            base_url="https://api.minimax.chat/v1/text/chatcompletion_v2"
-        super().__init__(key, model_name, base_url)
+            base_url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+        self.base_url = base_url
+        self.model_name = model_name
+        self.api_key = key
+
+    def chat(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "system", "content": system})
+        for k in list(gen_conf.keys()):
+            if k not in ["temperature", "top_p", "max_tokens"]:
+                del gen_conf[k]
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = json.dumps(
+            {"model": self.model_name, "messages": history, **gen_conf}
+        )
+        try:
+            response = requests.request(
+                "POST", url=self.base_url, headers=headers, data=payload
+            )
+            response = response.json()
+            ans = response["choices"][0]["message"]["content"].strip()
+            if response["choices"][0]["finish_reason"] == "length":
+                ans += "...\nFor the content length reason, it stopped, continue?" if is_english(
+                    [ans]) else "······\n由于长度的原因，回答被截断了，要继续吗？"
+            return ans, response["usage"]["total_tokens"]
+        except Exception as e:
+            return "**ERROR**: " + str(e), 0
+
+    def chat_streamly(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "system", "content": system})
+        ans = ""
+        total_tokens = 0
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = json.dumps(
+                {
+                    "model": self.model_name,
+                    "messages": history,
+                    "stream": True,
+                    **gen_conf,
+                }
+            )
+            response = requests.request(
+                "POST",
+                url=self.base_url,
+                headers=headers,
+                data=payload,
+            )
+            for resp in response.text.split("\n\n")[:-1]:
+                resp = json.loads(resp[6:])
+                if "delta" in resp["choices"][0]:
+                    text = resp["choices"][0]["delta"]["content"]
+                else:
+                    continue
+                ans += text
+                total_tokens += num_tokens_from_string(text)
+                yield ans
+
+        except Exception as e:
+            yield ans + "\n**ERROR**: " + str(e)
+
+        yield total_tokens
 
 
 class MistralChat(Base):
@@ -681,3 +854,222 @@ class BedrockChat(Base):
             yield ans + f"ERROR: Can't invoke '{self.model_name}'. Reason: {e}"
 
         yield num_tokens_from_string(ans)
+
+class GeminiChat(Base):
+
+    def __init__(self, key, model_name,base_url=None):
+        from google.generativeai import client,GenerativeModel
+
+        client.configure(api_key=key)
+        _client = client.get_default_generative_client()
+        self.model_name = 'models/' + model_name
+        self.model = GenerativeModel(model_name=self.model_name)
+        self.model._client = _client
+
+    def chat(self,system,history,gen_conf):
+        if system:
+            history.insert(0, {"role": "user", "parts": system})
+        if 'max_tokens' in gen_conf:
+            gen_conf['max_output_tokens'] = gen_conf['max_tokens']
+        for k in list(gen_conf.keys()):
+            if k not in ["temperature", "top_p", "max_output_tokens"]:
+                del gen_conf[k]
+        for item in history:
+            if 'role' in item and item['role'] == 'assistant':
+                item['role'] = 'model'
+            if  'content' in item :
+                item['parts'] = item.pop('content')
+
+        try:
+            response = self.model.generate_content(
+                history,
+                generation_config=gen_conf)
+            ans = response.text
+            return ans, response.usage_metadata.total_token_count
+        except Exception as e:
+            return "**ERROR**: " + str(e), 0
+
+    def chat_streamly(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "user", "parts": system})
+        if 'max_tokens' in gen_conf:
+            gen_conf['max_output_tokens'] = gen_conf['max_tokens']
+        for k in list(gen_conf.keys()):
+            if k not in ["temperature", "top_p", "max_output_tokens"]:
+                del gen_conf[k]
+        for item in history:
+            if 'role' in item and item['role'] == 'assistant':
+                item['role'] = 'model'
+            if  'content' in item :
+                item['parts'] = item.pop('content')
+        ans = ""
+        try:
+            response = self.model.generate_content(
+                history,
+                generation_config=gen_conf,stream=True)
+            for resp in response:
+                ans += resp.text
+                yield ans
+
+        except Exception as e:
+            yield ans + "\n**ERROR**: " + str(e)
+
+        yield  response._chunks[-1].usage_metadata.total_token_count
+
+
+class GroqChat:
+    def __init__(self, key, model_name,base_url=''):
+        self.client = Groq(api_key=key)
+        self.model_name = model_name
+
+    def chat(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "system", "content": system})
+        for k in list(gen_conf.keys()):
+            if k not in ["temperature", "top_p", "max_tokens"]:
+                del gen_conf[k]
+        ans = ""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=history,
+                **gen_conf
+            )
+            ans = response.choices[0].message.content
+            if response.choices[0].finish_reason == "length":
+                ans += "...\nFor the content length reason, it stopped, continue?" if is_english(
+                    [ans]) else "······\n由于长度的原因，回答被截断了，要继续吗？"
+            return ans, response.usage.total_tokens
+        except Exception as e:
+            return ans + "\n**ERROR**: " + str(e), 0
+
+    def chat_streamly(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "system", "content": system})
+        for k in list(gen_conf.keys()):
+            if k not in ["temperature", "top_p", "max_tokens"]:
+                del gen_conf[k]
+        ans = ""
+        total_tokens = 0
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=history,
+                stream=True,
+                **gen_conf
+            )
+            for resp in response:
+                if not resp.choices or not resp.choices[0].delta.content:
+                    continue
+                ans += resp.choices[0].delta.content
+                total_tokens += 1
+                if resp.choices[0].finish_reason == "length":
+                    ans += "...\nFor the content length reason, it stopped, continue?" if is_english(
+                        [ans]) else "······\n由于长度的原因，回答被截断了，要继续吗？"
+                yield ans
+
+        except Exception as e:
+            yield ans + "\n**ERROR**: " + str(e)
+
+        yield total_tokens
+
+
+## openrouter
+class OpenRouterChat(Base):
+    def __init__(self, key, model_name, base_url="https://openrouter.ai/api/v1"):
+        self.base_url = "https://openrouter.ai/api/v1"
+        self.client = OpenAI(base_url=self.base_url, api_key=key)
+        self.model_name = model_name
+
+class StepFunChat(Base):
+    def __init__(self, key, model_name, base_url="https://api.stepfun.com/v1"):
+        if not base_url:
+            base_url = "https://api.stepfun.com/v1"
+        super().__init__(key, model_name, base_url)
+
+
+class NvidiaChat(Base):
+    def __init__(
+        self,
+        key,
+        model_name,
+        base_url="https://integrate.api.nvidia.com/v1/chat/completions",
+    ):
+        if not base_url:
+            base_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+        self.base_url = base_url
+        self.model_name = model_name
+        self.api_key = key
+        self.headers = {
+            "accept": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def chat(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "system", "content": system})
+        for k in list(gen_conf.keys()):
+            if k not in ["temperature", "top_p", "max_tokens"]:
+                del gen_conf[k]
+        payload = {"model": self.model_name, "messages": history, **gen_conf}
+        try:
+            response = requests.post(
+                url=self.base_url, headers=self.headers, json=payload
+            )
+            response = response.json()
+            ans = response["choices"][0]["message"]["content"].strip()
+            return ans, response["usage"]["total_tokens"]
+        except Exception as e:
+            return "**ERROR**: " + str(e), 0
+
+    def chat_streamly(self, system, history, gen_conf):
+        if system:
+            history.insert(0, {"role": "system", "content": system})
+        for k in list(gen_conf.keys()):
+            if k not in ["temperature", "top_p", "max_tokens"]:
+                del gen_conf[k]
+        ans = ""
+        total_tokens = 0
+        payload = {
+            "model": self.model_name,
+            "messages": history,
+            "stream": True,
+            **gen_conf,
+        }
+
+        try:
+            response = requests.post(
+                url=self.base_url,
+                headers=self.headers,
+                json=payload,
+            )
+            for resp in response.text.split("\n\n"):
+                if "choices" not in resp:
+                    continue
+                resp = json.loads(resp[6:])
+                if "content" in resp["choices"][0]["delta"]:
+                    text = resp["choices"][0]["delta"]["content"]
+                else:
+                    continue
+                ans += text
+                if "usage" in resp:
+                    total_tokens = resp["usage"]["total_tokens"]
+                yield ans
+
+        except Exception as e:
+            yield ans + "\n**ERROR**: " + str(e)
+
+        yield total_tokens
+
+
+class LmStudioChat(Base):
+    def __init__(self, key, model_name, base_url):
+        from os.path import join
+
+        if not base_url:
+            raise ValueError("Local llm url cannot be None")
+        if base_url.split("/")[-1] != "v1":
+            self.base_url = join(base_url, "v1")
+        self.client = OpenAI(api_key="lm-studio", base_url=self.base_url)
+        self.model_name = model_name

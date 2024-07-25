@@ -1,18 +1,3 @@
-#
-#  Copyright 2024 The InfiniFlow Authors. All Rights Reserved.
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
 import random
 from datetime import datetime
 from elasticsearch_dsl import Q
@@ -58,6 +43,35 @@ class DocumentService(CommonService):
         docs = docs.paginate(page_number, items_per_page)
 
         return list(docs.dicts()), count
+
+    @classmethod
+    @DB.connection_context()
+    def list_documents_in_dataset(cls, dataset_id, offset, count, order_by, descend, keywords):
+        if keywords:
+            docs = cls.model.select().where(
+                (cls.model.kb_id == dataset_id),
+                (fn.LOWER(cls.model.name).contains(keywords.lower()))
+            )
+        else:
+            docs = cls.model.select().where(cls.model.kb_id == dataset_id)
+
+        total = docs.count()
+
+        if descend == 'True':
+            docs = docs.order_by(cls.model.getter_by(order_by).desc())
+        if descend == 'False':
+            docs = docs.order_by(cls.model.getter_by(order_by).asc())
+
+        docs = list(docs.dicts())
+        docs_length = len(docs)
+
+        if offset < 0 or offset > docs_length:
+            raise IndexError("Offset is out of the valid range.")
+
+        if count == -1:
+            return docs[offset:], total
+
+        return docs[offset:offset + count], total
 
     @classmethod
     @DB.connection_context()
@@ -137,6 +151,25 @@ class DocumentService(CommonService):
             token_num,
             chunk_num=Knowledgebase.chunk_num +
             chunk_num).where(
+            Knowledgebase.id == kb_id).execute()
+        return num
+
+    @classmethod
+    @DB.connection_context()
+    def decrement_chunk_num(cls, doc_id, kb_id, token_num, chunk_num, duation):
+        num = cls.model.update(token_num=cls.model.token_num - token_num,
+                               chunk_num=cls.model.chunk_num - chunk_num,
+                               process_duation=cls.model.process_duation + duation).where(
+            cls.model.id == doc_id).execute()
+        if num == 0:
+            raise LookupError(
+                "Document not found which is supposed to be there")
+        num = Knowledgebase.update(
+            token_num=Knowledgebase.token_num -
+            token_num,
+            chunk_num=Knowledgebase.chunk_num -
+            chunk_num
+        ).where(
             Knowledgebase.id == kb_id).execute()
         return num
 
@@ -302,6 +335,17 @@ class DocumentService(CommonService):
     def get_kb_doc_count(cls, kb_id):
         return len(cls.model.select(cls.model.id).where(
             cls.model.kb_id == kb_id).dicts())
+
+
+    @classmethod
+    @DB.connection_context()
+    def do_cancel(cls, doc_id):
+        try:
+            _, doc = DocumentService.get_by_id(doc_id)
+            return doc.run == TaskStatus.CANCEL.value or doc.progress < 0
+        except Exception as e:
+            pass
+        return False
 
 
 def queue_raptor_tasks(doc):
