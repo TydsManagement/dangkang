@@ -16,7 +16,14 @@ class TestConfig(unittest.TestCase):
 import unittest
 from unittest.mock import patch
 import json
-from app import app  # Import your Flask app
+# from app import app  # Import your Flask app
+import pytest
+
+from ragflow_flask_wrapper import app
+@pytest.fixture
+def client():
+    with app.test_client() as client:
+        yield client
 
 class TestNewConversation(unittest.TestCase):
     def setUp(self):
@@ -48,7 +55,7 @@ class TestNewConversation(unittest.TestCase):
 import unittest
 from unittest.mock import patch
 import json
-from app import app
+# from app import app
 
 class TestConversationHistory(unittest.TestCase):
     def setUp(self):
@@ -82,7 +89,7 @@ class TestConversationHistory(unittest.TestCase):
 import unittest
 from unittest.mock import patch
 import json
-from app import app
+# from app import app
 
 class TestCompletion(unittest.TestCase):
     def setUp(self):
@@ -123,7 +130,7 @@ class TestCompletion(unittest.TestCase):
 import unittest
 from unittest.mock import patch, mock_open
 import json
-from app import app
+# from app import app
 
 class TestUploadDocument(unittest.TestCase):
     def setUp(self):
@@ -165,7 +172,7 @@ class TestUploadDocument(unittest.TestCase):
 import unittest
 from unittest.mock import patch
 import json
-from app import app
+# from app import app
 
 class TestListDocuments(unittest.TestCase):
     def setUp(self):
@@ -199,7 +206,7 @@ class TestListDocuments(unittest.TestCase):
 import unittest
 from unittest.mock import patch
 import json
-from app import app
+# from app import app
 
 class TestDeleteDocuments(unittest.TestCase):
     def setUp(self):
