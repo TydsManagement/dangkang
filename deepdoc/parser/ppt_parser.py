@@ -79,8 +79,7 @@ class RAGFlowPptParser(object):
             texts = []
             # 对当前页面的所有形状进行排序，按其在页面上的位置（顶部和左侧）
             for shape in sorted(
-                    slide.shapes, key=lambda x: (x.top // 10, x.left)):
-                # 提取形状中的文本内容
+                    slide.shapes, key=lambda x: ((x.top if x.top is not None else 0) // 10, x.left)):
                 txt = self.__extract(shape)
                 # 如果提取到文本，则添加到当前页面的文本内容列表中
                 if txt:

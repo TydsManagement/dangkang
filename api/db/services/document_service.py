@@ -127,7 +127,7 @@ class DocumentService(CommonService):
     @classmethod
     @DB.connection_context()
     def get_unfinished_docs(cls):
-        fields = [cls.model.id, cls.model.process_begin_at, cls.model.parser_config, cls.model.progress_msg]
+        fields = [cls.model.id, cls.model.process_begin_at, cls.model.parser_config, cls.model.progress_msg, cls.model.run]
         docs = cls.model.select(*fields) \
             .where(
                 cls.model.status == StatusEnum.VALID.value,
@@ -296,7 +296,8 @@ class DocumentService(CommonService):
                 prg = 0
                 finished = True
                 bad = 0
-                status = TaskStatus.RUNNING.value
+                e, doc = DocumentService.get_by_id(d["id"])
+                status = doc.run    # TaskStatus.RUNNING.value
                 for t in tsks:
                     if 0 <= t.progress < 1:
                         finished = False

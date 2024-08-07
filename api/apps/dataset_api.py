@@ -2,6 +2,8 @@ import json
 import os
 import re
 import warnings
+from functools import partial
+from io import BytesIO
 from datetime import datetime, timedelta
 from elasticsearch_dsl import Q
 from flask import request, Response
@@ -614,7 +616,7 @@ def doc_parse_callback(doc_id, prog=None, msg=""):
     if cancel:
         raise Exception("The parsing process has been cancelled!")
 
-
+"""
 def doc_parse(binary, doc_name, parser_name, tenant_id, doc_id):
     match parser_name:
         case "book":
@@ -647,6 +649,7 @@ def doc_parse(binary, doc_name, parser_name, tenant_id, doc_id):
             return False
 
     return True
+    """
 
 
 @manager.route("/<dataset_id>/documents/<document_id>/status", methods=["POST"])

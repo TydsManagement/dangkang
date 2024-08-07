@@ -23,7 +23,7 @@ import numpy as np
 # 导入timeit模块，用于测量代码执行时间
 from timeit import default_timer as timer
 # 导入PyPDF2模块，用于处理PDF文档
-from PyPDF2 import PdfReader as pdf2_read
+from pypdf import PdfReader as pdf2_read
 
 # 从file_utils模块导入get_project_base_directory函数，用于获取项目基础目录
 from api.utils.file_utils import get_project_base_directory
@@ -36,6 +36,7 @@ from copy import deepcopy
 # 从huggingface_hub模块导入snapshot_download函数，用于下载Hugging Face Hub上的模型快照
 from huggingface_hub import snapshot_download
 
+logging.getLogger("pdfminer").setLevel(logging.WARNING)
 
 
 class RAGFlowPdfParser:
@@ -536,9 +537,8 @@ class RAGFlowPdfParser:
 
         # 对检测到的字符进行处理，尝试将它们合并到相应的文本框中
         # merge chars in the same rect
-        for c in Recognizer.sort_X_firstly(
-                chars, self.mean_width[pagenum - 1] // 4):
-            # 寻找与当前字符重叠的文本框
+        for c in Recognizer.sort_Y_firstly(
+                chars, self.mean_height[pagenum - 1] // 4):
             ii = Recognizer.find_overlapped(c, bxs)
             # 如果没有找到重叠的文本框，则将字符添加到左侧未匹配字符列表中
             if ii is None:
@@ -644,7 +644,7 @@ class RAGFlowPdfParser:
             tt = b.get("text", "").strip()
             return tt and any([tt.find(t.strip()) == 0 for t in txts])
 
-        bxs = self.boxes
+        # horizontally merge adjacent box with the same layout
         i = 0
         while i < len(bxs) - 1:
             b = bxs[i]
@@ -655,33 +655,35 @@ class RAGFlowPdfParser:
                                                                                                  "equation"]:
                 i += 1
                 continue
-
-            # 垂直距离足够小则合并
-            if abs(self._y_dis(b, b_)) < self.mean_height[b["page_number"] - 1] / 3:
-                b["x1"] = b_["x1"]
-                b["top"] = (b["top"] + b_["top"]) / 2
-                b["bottom"] = (b["bottom"] + b_["bottom"]) / 2
-                b["text"] += b_["text"]
+            if abs(self._y_dis(b, b_)
+                   ) < self.mean_height[bxs[i]["page_number"] - 1] / 3:
+                # merge
+                bxs[i]["x1"] = b_["x1"]
+                bxs[i]["top"] = (b["top"] + b_["top"]) / 2
+                bxs[i]["bottom"] = (b["bottom"] + b_["bottom"]) / 2
+                bxs[i]["text"] += b_["text"]
                 bxs.pop(i + 1)
                 continue
+            i += 1
+            continue
 
             # 判断两个文本框的水平距离
             dis = b["x1"] - b_["x0"]
-            dis_thr = 1
-            if b.get("layout_type", "") != "text" or b_.get("layout_type", "") != "text":
-                if end_with(b, "，") or start_with(b_, ["（，"]):
+            if b.get("layout_type", "") != "text" or b_.get(
+                    "layout_type", "") != "text":
+                if end_with(b, "，") or start_with(b_, "（，"):
                     dis_thr = -8
                 else:
                     i += 1
                     continue
 
-            # 垂直距离与水平距离的综合判断
-            if abs(self._y_dis(b, b_)) < self.mean_height[b["page_number"] - 1] / 5 and dis >= dis_thr and b["x1"] < b_[
-                "x1"]:
-                b["x1"] = b_["x1"]
-                b["top"] = (b["top"] + b_["top"]) / 2
-                b["bottom"] = (b["bottom"] + b_["bottom"]) / 2
-                b["text"] += b_["text"]
+            if abs(self._y_dis(b, b_)) < self.mean_height[bxs[i]["page_number"] - 1] / 5 \
+                    and dis >= dis_thr and b["x1"] < b_["x1"]:
+                # merge
+                bxs[i]["x1"] = b_["x1"]
+                bxs[i]["top"] = (b["top"] + b_["top"]) / 2
+                bxs[i]["bottom"] = (b["bottom"] + b_["bottom"]) / 2
+                bxs[i]["text"] += b_["text"]
                 bxs.pop(i + 1)
                 continue
 
@@ -718,8 +720,9 @@ class RAGFlowPdfParser:
             # 判断是否应连接两个文本框的特征（如标点结尾）
             concatting_feats = [
                 b["text"].strip()[-1] in ",;:'\"，、‘“；：-",
-                len(b["text"].strip()) > 1 and b["text"].strip()[-2] in ",;:'\"，‘“、；：",
-                b_["text"].strip() and b_["text"].strip()[0] in "。；？！？”）),，、：",
+                len(b["text"].strip()) > 1 and b["text"].strip(
+                )[-2] in ",;:'\"，‘“、；：",
+                b_["text"].strip() and b_["text"].strip()[0] in "。；？！?”）),，、：",
             ]
 
             # 判断不应连接的特征（如不同区块、句号结尾等）
@@ -837,12 +840,19 @@ class RAGFlowPdfParser:
                         i += 1
                         continue
                     # 判断当前块和后续块是否在页面上的位置过于分离
-                    if up["x1"] < down["x0"] - 10 * mw or up["x0"] > down["x1"] + 10 * mw:
+                    if not down["text"].strip():
                         i += 1
                         continue
+
+                    if up["x1"] < down["x0"] - 10 * \
+                            mw or up["x0"] > down["x1"] + 10 * mw:
+                        i += 1
+                        continue
+
                     # 如果当前块是文本类型，且组合数量小于5，进一步判断布局编号是否相同
                     if i - dp < 5 and up.get("layout_type") == "text":
-                        if up.get("layoutno", "1") == down.get("layoutno", "2"):
+                        if up.get("layoutno", "1") == down.get(
+                                "layoutno", "2"):
                             dfs(down, i + 1)
                             boxes.pop(i)
                             return
@@ -850,7 +860,8 @@ class RAGFlowPdfParser:
                         continue
                     # 使用机器学习模型预测当前块和后续块是否应该组合
                     fea = self._updown_concat_features(up, down)
-                    if self.updown_cnt_mdl.predict(xgb.DMatrix([fea]))[0] <= 0.5:
+                    if self.updown_cnt_mdl.predict(
+                            xgb.DMatrix([fea]))[0] <= 0.5:
                         i += 1
                         continue
                     dfs(down, i + 1)
@@ -1165,11 +1176,18 @@ class RAGFlowPdfParser:
             # 根据距离判断将标题分配给最近的表格或图片，并记录日志
             if tv < fv and tk:
                 tables[tk].insert(0, c)
-                logging.debug(f"TABLE:{self.boxes[i]['text']}; Cap: {tk}")
+                logging.debug(
+                    "TABLE:" +
+                    self.boxes[i]["text"] +
+                    "; Cap: " +
+                    tk)
             elif fk:
                 figures[fk].insert(0, c)
-                logging.debug(f"FIGURE:{self.boxes[i]['text']}; Cap: {fk}")
-            # 从原始列表中移除已处理的标题框
+                logging.debug(
+                    "FIGURE:" +
+                    self.boxes[i]["text"] +
+                    "; Cap: " +
+                    tk)
             self.boxes.pop(i)
 
         # 初始化结果列表和位置列表，准备存储处理后的信息
@@ -1257,7 +1275,11 @@ class RAGFlowPdfParser:
 
             poss = []  # 初始化位置列表
             # 裁剪图例区域，添加文本说明，更新位置列表，并将结果加入res
-            res.append((cropout(bxs, "figure", poss), [txt]))
+            res.append(
+                (cropout(
+                    bxs,
+                    "figure", poss),
+                 [txt]))
             positions.append(poss)
 
     # 对于表格处理
@@ -1452,7 +1474,7 @@ class RAGFlowPdfParser:
                 fnm, str) else pdfplumber.open(BytesIO(fnm))
             self.page_images = [p.to_image(resolution=72 * zoomin).annotated for i, p in
                                 enumerate(self.pdf.pages[page_from:page_to])]
-            self.page_chars = [[c for c in page.chars if self._has_color(c)] for page in
+            self.page_chars = [[{**c, 'top': c['top'], 'bottom': c['bottom']} for c in page.dedupe_chars().chars if self._has_color(c)] for page in
                                self.pdf.pages[page_from:page_to]]
             self.total_page = len(self.pdf.pages)
         except Exception as e:

@@ -58,7 +58,7 @@ def set_api_key():
                 req["api_key"], llm.llm_name, base_url=req.get("base_url"))
             try:
                 m, tc = mdl.chat(None, [{"role": "user", "content": "Hello! How are you doing!"}],
-                                 {"temperature": 0.9,'max_tokens':50})
+                                 {"temperature": 0.9, 'max_tokens': 50})
                 if not tc:
                     raise Exception(m)
             except Exception as e:
@@ -195,7 +195,7 @@ def add_llm():
                 if not tc:
                     raise Exception(m)
             else:
-                raise ConnectionError("fail to download the test picture")
+                pass
         except Exception as e:
             msg += f"\nFail to access model({llm['llm_name']})." + str(e)
     else:

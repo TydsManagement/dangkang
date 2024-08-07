@@ -4,13 +4,15 @@ import { Drawer, Flex, Form, Input } from 'antd';
 import { useEffect } from 'react';
 import { Node } from 'reactflow';
 import AnswerForm from '../answer-form';
-import ArxivForm from '../arxiv-form';
+import ArXivForm from '../arxiv-form';
 import BaiduForm from '../baidu-form';
 import BeginForm from '../begin-form';
+import BingForm from '../bing-form';
 import CategorizeForm from '../categorize-form';
 import { Operator } from '../constant';
 import DuckDuckGoForm from '../duckduckgo-form';
 import GenerateForm from '../generate-form';
+import GoogleForm from '../google-form';
 import { useHandleFormValuesChange, useHandleNodeNameChange } from '../hooks';
 import KeywordExtractForm from '../keyword-extract-form';
 import MessageForm from '../message-form';
@@ -41,7 +43,9 @@ const FormMap = {
   [Operator.KeywordExtract]: KeywordExtractForm,
   [Operator.Wikipedia]: WikipediaForm,
   [Operator.PubMed]: PubMedForm,
-  [Operator.Arxiv]: ArxivForm,
+  [Operator.ArXiv]: ArXivForm,
+  [Operator.Google]: GoogleForm,
+  [Operator.Bing]: BingForm,
 };
 
 const EmptyContent = () => <div>empty</div>;

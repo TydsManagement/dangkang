@@ -100,7 +100,7 @@ class RedisDB:
             logging.warning("Redis can't be connected.")
         return self.REDIS
 
-    def health(self, queue_name):
+    def health(self):
         """
         检查Redis服务的连通性，并获取指定队列的分组信息。
 

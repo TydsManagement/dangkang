@@ -65,7 +65,8 @@ FACTORY = {
     ParserType.RESUME.value: resume,
     ParserType.PICTURE.value: picture,
     ParserType.ONE.value: one,
-    ParserType.AUDIO.value: audio
+    ParserType.AUDIO.value: audio,
+    ParserType.KG.value: knowledge_graph
 }
 
 
@@ -178,8 +179,8 @@ def build(row):
     """
     # 检查文件大小是否超过限制
     if row["size"] > DOC_MAXIMUM_SIZE:
-        # 如果文件过大，则记录错误信息并返回空列表
-        set_progress(row["id"], prog=-1, msg="File size exceeds( <= %dMb )" % (int(DOC_MAXIMUM_SIZE / 1024 / 1024)))
+        set_progress(row["id"], prog=-1, msg="File size exceeds( <= %dMb )" %
+                                             (int(DOC_MAXIMUM_SIZE / 1024 / 1024)))
         return []
 
     # 设置进度更新的回调函数
@@ -232,7 +233,8 @@ def build(row):
         d.update(ck)
         # 为每个文档片段生成唯一ID
         md5 = hashlib.md5()
-        md5.update((ck["content_with_weight"] + str(d["doc_id"])).encode("utf-8"))
+        md5.update((ck["content_with_weight"] +
+                    str(d["doc_id"])).encode("utf-8"))
         d["_id"] = md5.hexdigest()
         # 设置文档的创建时间和戳
         d["create_time"] = str(datetime.datetime.now()).replace("T", " ")[:19]
