@@ -1,6 +1,6 @@
 ragflow:
   host: 0.0.0.0
-  http_port: 20241
+  http_port: 9380
 mysql:
   name: 'toyou_manager'
   user: 'root'

@@ -9,8 +9,8 @@ services:
         condition: service_healthy
       es01:
         condition: service_healthy
-    image: infiniflow/ragflow:${RAGFLOW_VERSION}
-    container_name: ragflow-server
+    image: toyou/dangkangai:${RAGFLOW_VERSION}
+    container_name: dangkangai-server
     ports:
       - ${SVR_HTTP_PORT}:9380
       - 80:80
