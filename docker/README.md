@@ -4,17 +4,17 @@
 Look into [.env](./.env), there're some important variables.
 
 ## MYSQL_PASSWORD
-The mysql password could be changed by this variable. But you need to change *mysql.password* in [service_conf.yaml](./service_conf.yaml) at the same time.
+The mysql password could be changed by this variable. But you need to change *mysql.password* in [service_conf.yaml](../conf/service_conf.yaml) at the same time.
 
 
 ## MYSQL_PORT
 It refers to exported port number of mysql docker container, it's useful if you want to access the database outside the docker containers.
 
 ## MINIO_USER
-It refers to user name of [Mino](https://github.com/minio/minio). The modification should be synchronous updating at minio.user of  [service_conf.yaml](./service_conf.yaml).
+It refers to user name of [Mino](https://github.com/minio/minio). The modification should be synchronous updating at minio.user of  [service_conf.yaml](../conf/service_conf.yaml).
 
 ## MINIO_PASSWORD
-It refers to user password of [Mino](https://github.com/minio/minio). The modification should be synchronous updating at minio.password of  [service_conf.yaml](./service_conf.yaml).
+It refers to user password of [Mino](https://github.com/minio/minio). The modification should be synchronous updating at minio.password of  [service_conf.yaml](../conf/service_conf.yaml).
 
 
 ## SVR_HTTP_PORT
@@ -22,7 +22,7 @@ It refers to The API server serving port.
 
 
 # Service Configuration
-[service_conf.yaml](./service_conf.yaml) is used by the *API server* and *task executor*. It's the most important configuration of the system.
+[service_conf.yaml](../conf/service_conf.yaml) is used by the *API server* and *task executor*. It's the most important configuration of the system.
 
 ## ragflow
 

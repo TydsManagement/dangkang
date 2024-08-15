@@ -1,5 +1,5 @@
 import api from '@/utils/api';
-import registerServer from '@/utils/registerServer';
+import registerServer from '@/utils/register-server';
 import request from '@/utils/request';
 import pureRequest from 'umi-request';
 
@@ -27,6 +27,7 @@ const {
   get_document_file,
   document_upload,
   web_crawl,
+  knowledge_graph,
 } = api;
 
 const methods = {
@@ -120,6 +121,10 @@ const methods = {
   retrieval_test: {
     url: retrieval_test,
     method: 'post',
+  },
+  knowledge_graph: {
+    url: knowledge_graph,
+    method: 'get',
   },
 };
 

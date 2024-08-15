@@ -1,10 +1,5 @@
-import { ChunkModelState } from '@/pages/add-knowledge/components/knowledge-chunk/model';
 import { KFModelState } from '@/pages/add-knowledge/components/knowledge-file/model';
-import { TestingModelState } from '@/pages/add-knowledge/components/knowledge-testing/model';
-import { kAModelState } from '@/pages/add-knowledge/model';
 import { ChatModelState } from '@/pages/chat/model';
-import { LoginModelState } from '@/pages/login/model';
-import { SettingModelState } from '@/pages/user-setting/model';
 
 declare module 'lodash';
 
@@ -15,12 +10,7 @@ function useSelector<TState = RootState, TSelected = unknown>(
 
 export interface RootState {
   chatModel: ChatModelState;
-  loginModel: LoginModelState;
-  settingModel: SettingModelState;
   kFModel: KFModelState;
-  kAModel: kAModelState;
-  chunkModel: ChunkModelState;
-  testingModel: TestingModelState;
 }
 
 declare global {

@@ -37,7 +37,8 @@ CvModel = {
     "OpenRouter": OpenRouterCV,
     "LocalAI": LocalAICV,
     "NVIDIA": NvidiaCV,
-    "LM-Studio": LmStudioCV
+    "LM-Studio": LmStudioCV,
+    "StepFun": StepFunCV
 }
 
 

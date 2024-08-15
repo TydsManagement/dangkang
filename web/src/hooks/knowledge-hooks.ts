@@ -1,11 +1,19 @@
 import { useShowDeleteConfirm } from '@/hooks/common-hooks';
-import { IKnowledge } from '@/interfaces/database/knowledge';
+import { ResponsePostType } from '@/interfaces/database/base';
+import { IKnowledge, ITestingResult } from '@/interfaces/database/knowledge';
 import i18n from '@/locales/config';
 import kbService from '@/services/knowledge-service';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useIsMutating,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { message } from 'antd';
 import { useCallback, useEffect } from 'react';
 import { useDispatch, useSearchParams, useSelector } from 'umi';
+import { useSetPaginationParams } from './route-hook';
 
 export const useKnowledgeBaseId = (): string => {
   const [searchParams] = useSearchParams();
@@ -37,37 +45,6 @@ export const useDeleteDocumentById = (): {
 
   return {
     removeDocument: onRmDocument,
-  };
-};
-
-export const useDeleteChunkByIds = (): {
-  removeChunk: (chunkIds: string[], documentId: string) => Promise<number>;
-} => {
-  const dispatch = useDispatch();
-  const showDeleteConfirm = useShowDeleteConfirm();
-
-  const removeChunk = useCallback(
-    (chunkIds: string[], documentId: string) => () => {
-      return dispatch({
-        type: 'chunkModel/rm_chunk',
-        payload: {
-          chunk_ids: chunkIds,
-          doc_id: documentId,
-        },
-      });
-    },
-    [dispatch],
-  );
-
-  const onRemoveChunk = useCallback(
-    (chunkIds: string[], documentId: string): Promise<number> => {
-      return showDeleteConfirm({ onOk: removeChunk(chunkIds, documentId) });
-    },
-    [removeChunk, showDeleteConfirm],
-  );
-
-  return {
-    removeChunk: onRemoveChunk,
   };
 };
 
@@ -217,23 +194,65 @@ export const useUpdateKnowledge = () => {
 
 //#region Retrieval testing
 
-export const useTestChunkRetrieval = () => {
-  const dispatch = useDispatch();
+export const useTestChunkRetrieval = (): ResponsePostType<ITestingResult> & {
+  testChunk: (...params: any[]) => void;
+} => {
   const knowledgeBaseId = useKnowledgeBaseId();
+  const { page, size: pageSize } = useSetPaginationParams();
 
-  const testChunk = useCallback(
-    (values: any) => {
-      dispatch({
-        type: 'testingModel/testDocumentChunk',
-        payload: {
-          ...values,
-          kb_id: knowledgeBaseId,
-        },
+  const {
+    data,
+    isPending: loading,
+    mutateAsync,
+  } = useMutation({
+    mutationKey: ['testChunk'], // This method is invalid
+    mutationFn: async (values: any) => {
+      const { data } = await kbService.retrieval_test({
+        ...values,
+        kb_id: knowledgeBaseId,
+        page,
+        size: pageSize,
       });
+      if (data.retcode === 0) {
+        const res = data.data;
+        return {
+          chunks: res.chunks,
+          documents: res.doc_aggs,
+          total: res.total,
+        };
+      }
+      return (
+        data?.data ?? {
+          chunks: [],
+          documents: [],
+          total: 0,
+        }
+      );
     },
-    [dispatch, knowledgeBaseId],
-  );
+  });
 
-  return testChunk;
+  return {
+    data: data ?? { chunks: [], documents: [], total: 0 },
+    loading,
+    testChunk: mutateAsync,
+  };
+};
+
+export const useChunkIsTesting = () => {
+  return useIsMutating({ mutationKey: ['testChunk'] }) > 0;
+};
+
+export const useSelectTestingResult = (): ITestingResult => {
+  const data = useMutationState({
+    filters: { mutationKey: ['testChunk'] },
+    select: (mutation) => {
+      return mutation.state.data;
+    },
+  });
+  return (data.at(-1) ?? {
+    chunks: [],
+    documents: [],
+    total: 0,
+  }) as ITestingResult;
 };
 //#endregion

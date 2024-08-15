@@ -1,4 +1,3 @@
-import { useOneNamespaceEffectsLoading } from '@/hooks/store-hooks';
 import { useSaveSetting } from '@/hooks/user-setting-hooks';
 import { rsaPsw } from '@/utils';
 import { Button, Divider, Form, Input, Space } from 'antd';
@@ -6,7 +5,6 @@ import SettingTitle from '../components/setting-title';
 import { useValidateSubmittable } from '../hooks';
 
 import { useTranslate } from '@/hooks/common-hooks';
-import parentStyles from '../index.less';
 import styles from './index.less';
 
 type FieldType = {
@@ -20,9 +18,8 @@ const tailLayout = {
 };
 
 const UserSettingPassword = () => {
-  const loading = useOneNamespaceEffectsLoading('settingModel', ['setting']);
   const { form, submittable } = useValidateSubmittable();
-  const saveSetting = useSaveSetting();
+  const { saveSetting, loading } = useSaveSetting();
   const { t } = useTranslate('setting');
 
   const onFinish = (values: any) => {
@@ -81,13 +78,11 @@ const UserSettingPassword = () => {
                 message: t('newPasswordMessage'),
                 whitespace: true,
               },
+              { type: 'string', min: 8, message: t('newPasswordDescription') },
             ]}
           >
             <Input.Password />
           </Form.Item>
-          <p className={parentStyles.itemDescription}>
-            {t('newPasswordDescription')}
-          </p>
         </Form.Item>
         <Divider />
         <Form.Item<FieldType>
@@ -100,6 +95,7 @@ const UserSettingPassword = () => {
               message: t('confirmPasswordMessage'),
               whitespace: true,
             },
+            { type: 'string', min: 8, message: t('newPasswordDescription') },
             ({ getFieldValue }) => ({
               validator(_, value) {
                 if (!value || getFieldValue('new_password') === value) {

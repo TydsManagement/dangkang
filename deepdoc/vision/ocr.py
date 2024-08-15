@@ -1,29 +1,14 @@
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
-
 import copy
-import time
+import numpy as np
+import onnxruntime as ort
 import os
-
+import time
 from huggingface_hub import snapshot_download
 
 from api.utils.file_utils import get_project_base_directory
-from .operators import *
-import numpy as np
-import onnxruntime as ort
-
-from .postprocess import build_post_process
 from rag.settings import cron_logger
+from .operators import *
+from .postprocess import build_post_process
 
 
 def transform(data, ops=None):
@@ -566,9 +551,6 @@ class OCR(object):
             end = time.time()
             time_dict['all'] = end - start
             return None, None, time_dict
-        else:
-            cron_logger.debug("dt_boxes num : {}, elapsed : {}".format(
-                len(dt_boxes), elapse))
 
         return zip(self.sorted_boxes(dt_boxes), [
                    ("", 0) for _ in range(len(dt_boxes))])
@@ -597,9 +579,7 @@ class OCR(object):
             end = time.time()
             time_dict['all'] = end - start
             return None, None, time_dict
-        else:
-            cron_logger.debug("dt_boxes num : {}, elapsed : {}".format(
-                len(dt_boxes), elapse))
+
         img_crop_list = []
 
         dt_boxes = self.sorted_boxes(dt_boxes)
@@ -612,8 +592,6 @@ class OCR(object):
         rec_res, elapse = self.text_recognizer(img_crop_list)
 
         time_dict['rec'] = elapse
-        cron_logger.debug("rec_res num  : {}, elapsed : {}".format(
-            len(rec_res), elapse))
 
         filter_boxes, filter_rec_res = [], []
         for box, rec_result in zip(dt_boxes, rec_res):

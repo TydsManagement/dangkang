@@ -1,6 +1,5 @@
 import { useSetModalState } from '@/hooks/common-hooks';
 import { useFetchFlow, useResetFlow, useSetFlow } from '@/hooks/flow-hooks';
-import { useFetchLlmList } from '@/hooks/llm-hooks';
 import { IGraph } from '@/interfaces/database/flow';
 import { useIsFetching } from '@tanstack/react-query';
 import React, {
@@ -31,12 +30,14 @@ import {
   NodeMap,
   Operator,
   RestrictedUpstreamMap,
-  initialArxivValues,
+  initialArXivValues,
   initialBaiduValues,
   initialBeginValues,
+  initialBingValues,
   initialCategorizeValues,
   initialDuckValues,
   initialGenerateValues,
+  initialGoogleValues,
   initialKeywordExtractValues,
   initialMessageValues,
   initialPubMedValues,
@@ -70,7 +71,7 @@ export const useSelectCanvasData = () => {
 };
 
 export const useInitializeOperatorParams = () => {
-  const llmId = useFetchModelId(true);
+  const llmId = useFetchModelId();
 
   const initialFormValuesMap = useMemo(() => {
     return {
@@ -93,7 +94,9 @@ export const useInitializeOperatorParams = () => {
       [Operator.Baidu]: initialBaiduValues,
       [Operator.Wikipedia]: initialWikipediaValues,
       [Operator.PubMed]: initialPubMedValues,
-      [Operator.Arxiv]: initialArxivValues,
+      [Operator.ArXiv]: initialArXivValues,
+      [Operator.Google]: initialGoogleValues,
+      [Operator.Bing]: initialBingValues,
     };
   }, [llmId]);
 
@@ -249,8 +252,22 @@ export const useHandleFormValuesChange = (id?: string) => {
   const updateNodeForm = useGraphStore((state) => state.updateNodeForm);
   const handleValuesChange = useCallback(
     (changedValues: any, values: any) => {
+      let nextValues: any = values;
+      // Fixed the issue that the related form value does not change after selecting the freedom field of the model
+      if (
+        Object.keys(changedValues).length === 1 &&
+        'parameter' in changedValues &&
+        changedValues['parameter'] in settledModelVariableMap
+      ) {
+        nextValues = {
+          ...values,
+          ...settledModelVariableMap[
+            changedValues['parameter'] as keyof typeof settledModelVariableMap
+          ],
+        };
+      }
       if (id) {
-        updateNodeForm(id, values);
+        updateNodeForm(id, nextValues);
       }
     },
     [updateNodeForm, id],
@@ -282,8 +299,6 @@ export const useFetchDataOnMount = () => {
   }, [setGraphInfo, data]);
 
   useWatchGraphChange();
-
-  useFetchLlmList();
 
   useEffect(() => {
     refetch();

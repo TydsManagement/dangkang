@@ -11,10 +11,9 @@ import {
 } from '@/hooks/document-hooks';
 import { useGetKnowledgeSearchParams } from '@/hooks/route-hook';
 import { useOneNamespaceEffectsLoading } from '@/hooks/store-hooks';
-import { useFetchTenantInfo } from '@/hooks/user-setting-hooks';
 import { Pagination } from '@/interfaces/common';
 import { IChangeParserConfigRequestBody } from '@/interfaces/request/document';
-import { getUnSupportedFilesCount } from '@/utils/documentUtils';
+import { getUnSupportedFilesCount } from '@/utils/document-util';
 import { PaginationProps, UploadFile } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useNavigate, useSelector } from 'umi';
@@ -24,8 +23,6 @@ export const useFetchDocumentListOnMount = () => {
   const { knowledgeId } = useGetKnowledgeSearchParams();
   const fetchDocumentList = useFetchDocumentList();
   const dispatch = useDispatch();
-
-  useFetchTenantInfo();
 
   useEffect(() => {
     if (knowledgeId) {
