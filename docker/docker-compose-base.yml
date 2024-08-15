@@ -30,7 +30,7 @@ services:
     restart: always
 
   mysql:
-    image: mysql:5.7.18
+    image: arm64v8/mysql
     container_name: ragflow-mysql
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}
@@ -42,6 +42,7 @@ services:
       --default-authentication-plugin=mysql_native_password
       --tls_version="TLSv1.2,TLSv1.3"
       --init-file /data/application/init.sql
+      --bind-address=0.0.0.0
     ports:
       - ${MYSQL_PORT}:3306
     volumes:
