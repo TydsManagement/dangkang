@@ -1,0 +1,473 @@
+openapi: 3.0.0
+info:
+  title: RAGFlow API
+  version: 1.0.0
+  description: RESTful APIs for integrating RAGFlow capabilities into third-party applications.
+
+servers:
+  - url: http://<host_address>/v1/api
+
+security:
+  - BearerAuth: []
+
+paths:
+  /dataset:
+    post:
+      summary: Create dataset
+      operationId: createDataset
+      tags:
+        - Dataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dataset_name:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetResponse'
+    
+    get:
+      summary: Get dataset list
+      operationId: getDatasetList
+      tags:
+        - Dataset
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetListResponse'
+
+  /dataset/{dataset_id}:
+    delete:
+      summary: Delete dataset
+      operationId: deleteDataset
+      tags:
+        - Dataset
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+    get:
+      summary: Get dataset details
+      operationId: getDatasetDetails
+      tags:
+        - Dataset
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetDetailsResponse'
+
+    put:
+      summary: Update dataset details
+      operationId: updateDatasetDetails
+      tags:
+        - Dataset
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDatasetRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetDetailsResponse'
+
+  /dataset/{dataset_id}/documents:
+    post:
+      summary: Upload documents
+      operationId: uploadDocuments
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadDocumentsResponse'
+
+    get:
+      summary: List documents
+      operationId: listDocuments
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Count'
+        - $ref: '#/components/parameters/OrderBy'
+        - $ref: '#/components/parameters/Descend'
+        - $ref: '#/components/parameters/Keywords'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDocumentsResponse'
+
+  /dataset/{dataset_id}/documents/{document_id}:
+    delete:
+      summary: Delete document
+      operationId: deleteDocument
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+    put:
+      summary: Update document details
+      operationId: updateDocumentDetails
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDocumentRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetailsResponse'
+
+    get:
+      summary: Download document
+      operationId: downloadDocument
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /dataset/{dataset_id}/documents/{document_id}/parse:
+    post:
+      summary: Start parsing a document
+      operationId: startParsingDocument
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /dataset/{dataset_id}/documents/parse:
+    post:
+      summary: Start parsing multiple documents
+      operationId: startParsingMultipleDocuments
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                doc_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /dataset/{dataset_id}/documents/{document_id}/status:
+    get:
+      summary: Show parsing status of document
+      operationId: getDocumentParsingStatus
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentParsingStatusResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    DatasetId:
+      name: dataset_id
+      in: path
+      required: true
+      schema:
+        type: string
+    DocumentId:
+      name: document_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+    Count:
+      name: count
+      in: query
+      schema:
+        type: integer
+    OrderBy:
+      name: order_by
+      in: query
+      schema:
+        type: string
+    Descend:
+      name: descend
+      in: query
+      schema:
+        type: boolean
+    Keywords:
+      name: keywords
+      in: query
+      schema:
+        type: string
+
+  schemas:
+    DatasetResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+          properties:
+            dataset_name:
+              type: string
+            dataset_id:
+              type: string
+        message:
+          type: string
+
+    DatasetListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetDetails'
+        message:
+          type: string
+
+    DatasetDetails:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        created_by:
+          type: string
+        create_time:
+          type: integer
+        update_time:
+          type: integer
+        # Add other properties as needed
+
+    DatasetDetailsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/DatasetDetails'
+        message:
+          type: string
+
+    UpdateDatasetRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permission:
+          type: string
+        language:
+          type: string
+        chunk_method:
+          type: string
+        embedding_model_id:
+          type: string
+        photo:
+          type: string
+        layout_recognize:
+          type: boolean
+        token_num:
+          type: integer
+
+    UploadDocumentsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentDetails'
+        message:
+          type: string
+
+    DocumentDetails:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        location:
+          type: string
+        size:
+          type: integer
+        type:
+          type: string
+        # Add other properties as needed
+
+    ListDocumentsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+          properties:
+            docs:
+              type: array
+              items:
+                $ref: '#/components/schemas/DocumentDetails'
+            total:
+              type: integer
+        message:
+          type: string
+
+    UpdateDocumentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        # Add other properties as needed
+
+    DocumentDetailsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          $ref: '#/components/schemas/DocumentDetails'
+        message:
+          type: string
+
+    DocumentParsingStatusResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+          properties:
+            progress:
+              type: number
+            status:
+              type: string
+        message:
+          type: string
+
+    SuccessResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: boolean
+        message:
+          type: string
