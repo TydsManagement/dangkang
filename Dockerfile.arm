@@ -1,9 +1,9 @@
 FROM python:3.11
 USER  root
 
-RUN mkdir build
+#RUN mkdir build
 
-RUN cd build
+#RUN cd build
 
 WORKDIR /ragflow
 
@@ -14,9 +14,9 @@ RUN pip install --upgrade pip
 RUN pip config set global.index-url https://mirrors.cloud.tencent.com/pypi/simple
 
 
-RUN pip install nltk --default-timeout=10000
+RUN pip install nltk --default-timeout=100000
 
-RUN pip install  --default-timeout=100000 -r requirements.txt 
+RUN pip install  --default-timeout=10000000 -r requirements.txt 
 
 COPY nltk_data /ragflow/nltk_data/
 
@@ -28,12 +28,27 @@ COPY nltk_data /ragflow/nltk_data/
 
 #RUN python -c "nltk.download('punkt',download_dir='/ragflow/nltk_data/')"
 
-#RUN apt-get update 
+RUN apt-get update 
 RUN    apt-get install -y curl gnupg 
 RUN    rm -r -f /var/lib/apt/lists/*
 
-RUN curl -sL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y --fix-missing nodejs nginx ffmpeg libsm6 libxext6 libgl1
+#RUN curl -sL https://deb.nodesource.com/setup_20.x | bash - && \
+#apt-get install -y --fix-missing nodejs nginx ffmpeg libsm6 libxext6 libgl1
+
+#install nodeJS,NPM
+RUN curl -sL https://deb.nodesource.com/setup_20.x | bash 
+
+
+
+
+#RUN  apt-get install -y --fix-missing nodejs 
+
+RUN apt-get update
+RUN   apt-get install -y --fix-missing nginx
+#RUN  apt-get install libavcodec-dev libavformat-dev libavdevice-dev
+#RUN apt-get -y upgrade
+RUN apt-get install -y --fix-missing ffmpeg
+
 
 ADD ./web ./web
 
@@ -41,13 +56,13 @@ ADD ./web ./web
 #RUN npm config set registry  https://r.cnpmjs.org/
 
 #RUN npm config set registry https://registry.npm.taobao.org/
-RUN npm config set registry https://registry.npmmirror.com
+#RUN npm config set registry https://registry.npmmirror.com
 
 RUN cd ./web
 
 RUN  curl -v https://registry.npmjs.com/
 
-RUN npm config set registry https://registry.npmjs.com/
+#RUN npm config set registry https://registry.npmjs.com/
 
 #RUN npm update
 
@@ -55,7 +70,9 @@ RUN ls -v
 
 COPY package.json package-lock.json  .
 
-RUN npm install --force 
+RUN 
+
+RUN npm install  --loglevel verbose --force  
 
 RUN  npm run build
 
