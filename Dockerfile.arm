@@ -28,7 +28,11 @@ COPY nltk_data /ragflow/nltk_data/
 
 #RUN python -c "nltk.download('punkt',download_dir='/ragflow/nltk_data/')"
 
-RUN apt-get update 
+# 删除原有源，并添加阿里云的源
+RUN rm -rf /etc/apt/sources.list.d/* 
+RUN echo "deb https://mirrors.aliyun.com/ubuntu-ports/ focal main restricted universe multiverse" > /etc/apt/sources.list
+
+#RUN apt-get update 
 RUN    apt-get install -y curl gnupg 
 RUN    rm -r -f /var/lib/apt/lists/*
 
@@ -43,7 +47,7 @@ RUN curl -sL https://deb.nodesource.com/setup_20.x | bash
 
 #RUN  apt-get install -y --fix-missing nodejs 
 
-RUN apt-get update
+#RUN apt-get update
 RUN   apt-get install -y --fix-missing nginx
 #RUN  apt-get install libavcodec-dev libavformat-dev libavdevice-dev
 #RUN apt-get -y upgrade
@@ -72,7 +76,7 @@ COPY package.json package-lock.json  .
 
 RUN 
 
-RUN npm install  --loglevel verbose --force  
+RUN npm install--force  
 
 RUN  npm run build
 
