@@ -218,22 +218,47 @@ def get_json_result(retcode=RetCode.SUCCESS, retmsg='success', data=None):
 
 def cors_reponse(retcode=RetCode.SUCCESS,
                  retmsg='success', data=None, auth=None):
+    """
+    生成一个带有CORS（跨源资源共享）头的HTTP响应。
+
+    该函数用于构建一个包含retscode（状态码）、retmsg（状态信息）和data（数据）的HTTP响应，
+    并根据需要设置Authorization头。同时，它通过设置CORS头，允许跨源请求。
+
+    参数:
+    - retcode: 响应状态码，默认表示成功。
+    - retmsg: 响应状态信息，默认为'success'。
+    - data: 响应数据，默认为None。
+    - auth: 授权信息，默认为None。
+
+    返回:
+    - 一个设置了CORS头的HTTP响应对象。
+    """
+    # 构建初始响应字典
     result_dict = {"retcode": retcode, "retmsg": retmsg, "data": data}
     response_dict = {}
+
+    # 过滤响应字典，排除None值，但retcode为None时保留
     for key, value in result_dict.items():
         if value is None and key != "retcode":
             continue
         else:
             response_dict[key] = value
+
+    # 创建JSON响应对象
     response = make_response(jsonify(response_dict))
+
+    # 如果提供了授权信息，则添加到响应头中
     if auth:
         response.headers["Authorization"] = auth
+
+    # 设置CORS头，允许所有来源、方法和自定义头
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Method"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "*"
     response.headers["Access-Control-Expose-Headers"] = "Authorization"
+
     return response
+
 
 def construct_result(code=RetCode.DATA_ERROR, message='data is missing'):
     import re

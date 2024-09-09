@@ -1,18 +1,3 @@
-#
-#  Copyright 2024 The InfiniFlow Authors. All Rights Reserved.
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
 import json
 import re
 from datetime import datetime
@@ -37,26 +22,47 @@ from api.utils.api_utils import get_json_result, cors_reponse
 
 @manager.route('/login', methods=['POST', 'GET'])
 def login():
+    """
+    用户登录函数，支持通过密码登录。
+
+    支持POST和GET两种请求方法。通过请求的JSON数据获取用户邮箱和密码，
+    验证用户是否注册以及密码是否正确。如果验证成功，生成用户会话并返回用户信息；
+    否则返回相应的错误信息。
+
+    Returns:
+        - 登录成功时，返回用户信息及欢迎信息。
+        - 登录失败时，返回错误代码和错误信息。
+    """
+    # 指定登录渠道为密码
     login_channel = "password"
+
+    # 如果请求数据格式不正确，返回错误响应
     if not request.json:
         return get_json_result(data=False, retcode=RetCode.AUTHENTICATION_ERROR,
                                retmsg='Unautherized!')
 
+    # 从请求的JSON数据中获取用户邮箱，并查询用户信息
     email = request.json.get('email', "")
     users = UserService.query(email=email)
+
+    # 如果邮箱未注册，返回错误响应
     if not users:
         return get_json_result(
             data=False, retcode=RetCode.AUTHENTICATION_ERROR, retmsg=f'This Email is not registered!')
 
+    # 从请求的JSON数据中获取用户密码，并尝试解密
     password = request.json.get('password')
     try:
         password = decrypt(password)
     except BaseException:
+        # 如果解密失败，返回错误响应
         return get_json_result(
             data=False, retcode=RetCode.SERVER_ERROR, retmsg='Fail to crypt password')
 
+    # 验证用户邮箱和密码是否匹配
     user = UserService.query_user(email, password)
     if user:
+        # 如果匹配，生成用户会话，更新用户信息，并返回欢迎信息及用户信息
         response_data = user.to_json()
         user.access_token = get_uuid()
         login_user(user)
@@ -66,8 +72,10 @@ def login():
         msg = "Welcome back!"
         return cors_reponse(data=response_data, auth=user.get_id(), retmsg=msg)
     else:
+        # 如果不匹配，返回错误响应
         return get_json_result(data=False, retcode=RetCode.AUTHENTICATION_ERROR,
                                retmsg='Email and Password do not match!')
+
 
 
 @manager.route('/github_callback', methods=['GET'])
