@@ -1,0 +1,113 @@
+# 使用 QEMU 用户模式模拟器进行跨架构构建
+# FROM --platform=linux/arm64 multiarch/qemu-user-static:register as qemu
+
+# 基础镜像
+FROM ubuntu:latest AS base
+USER root
+
+WORKDIR /ragflow
+
+# 替换为国内的清华源
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' /etc/apt/sources.list && \
+    sed -i 's|http://ports.ubuntu.com/ubuntu-ports|https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports|g' /etc/apt/sources.list && \
+    apt-get update && apt-get install -f && \
+    apt-get install -y --no-install-recommends \
+        wget \
+        curl \
+        build-essential \
+        libopenmpi-dev \
+        git \
+        libglib2.0-0 \
+        libgl1 \
+        mesa-utils \
+        nginx \
+        ffmpeg \
+        libsm6 \
+        libxext6 \
+        && rm -rf /var/lib/apt/lists/*
+
+
+
+# 安装 Miniconda
+RUN wget --no-check-certificate https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh -O ~/miniconda.sh && \
+    bash ~/miniconda.sh -b -p /root/miniconda3 && \
+    rm ~/miniconda.sh && ln -s /root/miniconda3/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
+    echo ". /root/miniconda3/etc/profile.d/conda.sh" >> ~/.bashrc && \
+    echo "conda activate base" >> ~/.bashrc
+
+ENV PATH /root/miniconda3/bin:$PATH
+
+# 创建 Python 环境
+RUN conda create -y --name py11 python=3.11
+
+ENV CONDA_DEFAULT_ENV py11
+ENV CONDA_PREFIX /root/miniconda3/envs/py11
+ENV PATH $CONDA_PREFIX/bin:$PATH
+
+# 手动安装 Node.js 和 npm
+# 假设你把 node-v14.21.3-linux-arm64.tar.xz 文件放在当前目录（与 Dockerfile 同一目录）
+COPY node-v14.21.3-linux-arm64.tar.xz /tmp/
+
+# 解压和安装 Node.js 和 npm
+RUN tar -xJf /tmp/node-v14.21.3-linux-arm64.tar.xz -C /usr/local --strip-components=1 && \
+    rm /tmp/node-v14.21.3-linux-arm64.tar.xz
+
+# 配置 npm 使用国内源
+RUN npm config set registry https://registry.npmmirror.com
+
+
+# 克隆依赖库并构建
+RUN git config --global http.sslVerify false && \
+    git clone https://gitee.com/xover/three-bmfont-text.git /tmp/three-bmfont-text && \
+    cd /tmp/three-bmfont-text && npm install --loglevel verbose --force && npm run build
+
+# 创建所需的目录并只复制需要的文件
+RUN mkdir -p ./web/node_modules/three-bmfont-text && \
+    find /tmp/three-bmfont-text -mindepth 1 -maxdepth 1 ! -name 'web' -exec cp -r {} ./web/node_modules/three-bmfont-text/ \;
+
+RUN npm cache clean --force
+
+# 配置 npm 源以解决依赖问题
+RUN cd ./web && \
+    npm config set ssh://git@github.com https://github.com && \
+    find . -name "package*.json" -exec sed -i 's|git+ssh://git@github.com/|https://github.com/|g' {} + && \
+    find . -name "package*.json" -exec sed -i 's|git://github.com/|https://github.com/|g' {} + && \
+    npm install --loglevel verbose --force && npm run build
+
+# 安装 Python 依赖
+COPY requirements_arm.txt /ragflow/requirements.txt
+RUN conda run -n py11 pip install -i https://mirrors.aliyun.com/pypi/simple/ --default-timeout=1000 -r requirements.txt && \
+    python -c "import nltk;nltk.download('punkt');nltk.download('wordnet')"
+
+# 安装 Rust 环境
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# 安装 graspologic Python 包
+RUN conda run -n py11 pip install graspologic
+
+# 将本地下载的 NLTK 数据复制到容器
+ADD ./nltk_data /root/nltk_data
+
+# 添加应用文件
+ADD ./api ./api
+ADD ./conf ./conf
+ADD ./deepdoc ./deepdoc
+ADD ./rag ./rag
+ADD ./agent ./agent
+ADD ./graphrag ./graphrag
+
+# 构建前端应用
+ADD ./web ./web
+
+# 设置环境变量
+ENV PYTHONPATH=/ragflow/
+ENV HF_ENDPOINT=https://hf-mirror.com
+
+# 添加入口点脚本
+ADD docker/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+ADD docker/.env ./
+
+# 设置入口点
+ENTRYPOINT ["./entrypoint.sh"]
