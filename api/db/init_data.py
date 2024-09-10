@@ -2,6 +2,7 @@ import os
 import time
 import uuid
 from copy import deepcopy
+import json
 
 from api.db import LLMType, UserTenantRole
 from api.db.db_models import init_database_tables as init_web_db, LLMFactories, LLM, TenantLLM
