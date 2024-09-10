@@ -40,7 +40,7 @@ echo "API_RETRY_RETRY_INTERVAL: $API_RETRY_RETRY_INTERVAL"
 echo "API_RETRY_RETRY_TIMEOUT: $API_RETRY_RETRY_TIMEOUT"
 echo "API_RETRY_MAX_CONN: $API_RETRY_MAX_CONN"
 while true; do
-    $PY api/ragflow_server.py
+    $PY ragflow_server.py
 done
 
 # 等待所有子进程结束
