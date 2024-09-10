@@ -14,7 +14,7 @@ fi
 # 定义任务执行器函数，无限循环执行Python脚本
 function task_exe(){
     while true; do
-        $PY rag/svr/task_executor.py
+        $PY task_executor.py
     done
 }
 
