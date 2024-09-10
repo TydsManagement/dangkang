@@ -37,8 +37,7 @@ from rag.nlp import search, rag_tokenizer
 from io import BytesIO
 import pandas as pd
 
-# 导入特定应用领域的处理模块，如法律、论文、演示文稿等。
-from rag.app import laws, paper, presentation, manual, qa, table, book, resume, picture, naive, one, audio
+from rag.app import laws, paper, presentation, manual, qa, table, book, resume, picture, naive, one, audio, knowledge_graph
 
 # 导入数据库相关的枚举类型、文档服务和LLM服务类，用于数据库操作和大型语言模型的处理。
 from api.db import LLMType, ParserType
