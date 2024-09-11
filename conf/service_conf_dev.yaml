@@ -12,7 +12,7 @@ mysql:
 minio:
   user: 'rag_flow'
   password: 'infini_rag_flow'
-  host: 'minio:9000'
+  host: 'localhost:9000'
 es:
   hosts: 'http://localhost:1200'
   username: 'elastic'
@@ -20,7 +20,7 @@ es:
 redis:
   db: 1
   password: 'infini_rag_flow'
-  host: 'redis:6379'
+  host: 'localhost:6379'
 user_default_llm:
   factory: 'Tongyi-Qianwen'
   api_key: 'sk-xxxxxxxxxxxxx'
