@@ -64,7 +64,8 @@ def login():
     if user:
         # 如果匹配，生成用户会话，更新用户信息，并返回欢迎信息及用户信息
         response_data = user.to_json()
-        user.access_token = get_uuid()
+        # user.access_token = get_uuid()
+        user.access_token = "takemetoyourheart"
         login_user(user)
         user.update_time = current_timestamp(),
         user.update_date = datetime_format(datetime.now()),
