@@ -128,7 +128,7 @@ client_urls_prefix = [
 
 
 @login_manager.request_loader
-def load_user(web_request: object) -> object:
+def load_user(web_request):
     """
     登录管理器的请求加载器，用于在每个请求中尝试加载当前用户。
 
