@@ -16,7 +16,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/bin/bash -c "conda activate ragflow && /bin/bash $INSTALL_DIR/ragflow-start.sh"
+ExecStart=/bin/bash -c "/home/hnty/anaconda3/condabin/conda activate ragflow && /bin/bash $INSTALL_DIR/ragflow-start.sh"
 Restart=always
 Environment="WS=2" "API_PORT=8000" "API_HOST=0.0.0.0" "API_TIMEOUT=30" "API_MAX_CONN=100" "API_MAX_RETRY=3" "API_RETRY_INTERVAL=10" "API_RETRY_TIMEOUT=5" "API_RETRY_MAX_CONN=100" "API_RETRY_MAX_RETRY=3" "API_RETRY_RETRY_INTERVAL=10" "API_RETRY_RETRY_TIMEOUT=5"
 
