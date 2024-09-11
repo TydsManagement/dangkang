@@ -15,6 +15,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
+Group=root
 WorkingDirectory=$INSTALL_DIR
 ExecStart=/bin/bash -c "source /home/hnty/anaconda3/bin/activate ragflow && /bin/bash $INSTALL_DIR/ragflow-start.sh"
 Restart=always
