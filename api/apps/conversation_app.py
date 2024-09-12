@@ -242,3 +242,37 @@ def completion():
             return get_json_result(data=answer)
     except Exception as e:
         return server_error_response(e)
+
+
+@manager.route('/list_names', methods=['POST'])
+@login_required
+def list_conversation_names():
+    """
+    通过POST请求获取指定会话ID列表的会话名称。
+
+    本函数接收一个包含多个对话ID的JSON请求体，通过这些ID从数据库中检索对应的会话名称，
+    并以JSON格式返回。
+
+    使用了装饰器@login_required确保只有登录的用户才能访问此功能。
+
+    Returns:
+        JSON: 包含会话名称列表的JSON对象，如果某个对话ID不存在，则返回错误信息。
+    """
+    try:
+        # 从请求体中获取对话ID列表
+        conv_ids = request.json.get("conversation_ids", [])
+
+        if not conv_ids:
+            return get_data_error_result(retmsg="No conversation IDs provided!")
+
+        # 查询所有指定的对话记录
+        convs = ConversationService.query_by_ids(conv_ids)
+
+        # 提取每个对话的名称
+        names = [conv.name for conv in convs]
+
+        # 返回成功的响应，包含对话名称列表
+        return get_json_result(data=names)
+    except Exception as e:
+        # 捕获任何异常，返回服务器错误响应
+        return server_error_response(e)
