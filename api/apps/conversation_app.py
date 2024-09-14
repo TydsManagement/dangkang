@@ -269,7 +269,7 @@ def list_conversation_names():
         convs = ConversationService.get_by_ids(conv_ids)
 
         # 提取每个对话的名称和ID，返回为字典格式
-        results = [{"name": conv.name, "id": conv.id} for conv in convs]
+        results = [{"name": conv.name, "id": conv.id} for conv in convs if conv is not None]
 
         # 返回成功的响应，包含对话名称和ID列表
         return get_json_result(data=results)
