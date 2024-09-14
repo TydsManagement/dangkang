@@ -266,7 +266,7 @@ def list_conversation_names():
             return get_data_error_result(retmsg="No conversation IDs provided!")
 
         # 查询所有指定的对话记录
-        convs = ConversationService.query_by_ids(conv_ids)
+        convs = ConversationService.get_by_ids(conv_ids)
 
         # 提取每个对话的名称
         names = [conv.name for conv in convs]
