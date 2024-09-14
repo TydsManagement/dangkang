@@ -268,11 +268,11 @@ def list_conversation_names():
         # 查询所有指定的对话记录
         convs = ConversationService.get_by_ids(conv_ids)
 
-        # 提取每个对话的名称
-        names = [conv.name for conv in convs]
+        # 提取每个对话的名称和ID，返回为字典格式
+        results = [{"name": conv.name, "id": conv.id} for conv in convs]
 
-        # 返回成功的响应，包含对话名称列表
-        return get_json_result(data=names)
+        # 返回成功的响应，包含对话名称和ID列表
+        return get_json_result(data=results)
     except Exception as e:
         # 捕获任何异常，返回服务器错误响应
         return server_error_response(e)
