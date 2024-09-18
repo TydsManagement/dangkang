@@ -1,9 +1,9 @@
 services:
   ragflow:
     depends_on:
-      mysql:
+      ragflow-mysql:
         condition: service_healthy
-      es01:
+      ragflow-es-01:
         condition: service_healthy
     image: infiniflow/ragflow_toyou:${RAGFLOW_VERSION}
     container_name: dangkangai-server

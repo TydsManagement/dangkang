@@ -5,9 +5,9 @@ include:
 services:
   ragflow:
     depends_on:
-      ragflow-mysql:
+      mysql:
         condition: service_healthy
-      ragflow-es-01:
+      es01:
         condition: service_healthy
     image: toyou/dangkangai:${RAGFLOW_VERSION}
     container_name: dangkangai-server
