@@ -1,7 +1,3 @@
-include:
-#  - path: ./docker-compose-base.yml
-  - env_file: ./.env
-
 services:
   ragflow:
     depends_on:
@@ -25,6 +21,12 @@ services:
       - TZ=${TIMEZONE}
       - HF_ENDPOINT=https://huggingface.co
       - MACOS=${MACOS}
+    env_file:
+      - ./.env  # 添加env_file以加载环境变量
     networks:
       - ragflow
     restart: always
+
+networks:
+  ragflow:
+    driver: bridge
