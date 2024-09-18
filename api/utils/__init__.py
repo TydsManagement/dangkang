@@ -32,8 +32,8 @@ from filelock import FileLock
 
 from . import file_utils
 
-SERVICE_CONF = "service_conf_dev.yaml"
-
+# SERVICE_CONF = "service_conf_dev.yaml"
+SERVICE_CONF = "service_conf.yaml"
 
 def conf_realpath(conf_name):
     conf_path = f"conf/{conf_name}"
