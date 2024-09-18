@@ -1,5 +1,5 @@
 include:
-  - path: ./docker-compose-base.yml
+#  - path: ./docker-compose-base.yml
     env_file: ./.env
 
 services:
