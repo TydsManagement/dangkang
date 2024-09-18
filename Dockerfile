@@ -16,6 +16,10 @@ ADD ./rag ./rag
 ADD ./agent ./agent
 ADD ./graphrag ./graphrag
 
+# 复制requirements.txt 并安装Python依赖
+ADD ./requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
 # 设置环境变量
 ENV PYTHONPATH=/ragflow/
 ENV HF_ENDPOINT=https://hf-mirror.com
