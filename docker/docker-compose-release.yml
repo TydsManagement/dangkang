@@ -1,5 +1,5 @@
 services:
-  ragflow:
+  ragflow_toyou:
     image: infiniflow/ragflow_toyou:${RAGFLOW_VERSION}
     container_name: dangkangai-server
     ports:
