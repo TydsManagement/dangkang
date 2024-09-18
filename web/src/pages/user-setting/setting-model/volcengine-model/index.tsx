@@ -13,7 +13,7 @@ const VolcEngineModal = ({
   hideModal,
   onOk,
   loading,
-  llmFactory
+  llmFactory,
 }: IModalProps<IAddLlmRequestBody> & { llmFactory: string }) => {
   const [form] = Form.useForm<FieldType>();
 

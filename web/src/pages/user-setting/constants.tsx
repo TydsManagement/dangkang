@@ -17,4 +17,9 @@ export const UserSettingIconMap = {
 
 export * from '@/constants/setting';
 
-export const LocalLlmFactories = ['Ollama', 'Xinference','LocalAI','LM-Studio'];
+export const LocalLlmFactories = [
+  'Ollama',
+  'Xinference',
+  'LocalAI',
+  'LM-Studio',
+];
