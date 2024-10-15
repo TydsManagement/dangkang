@@ -224,23 +224,43 @@ class Dealer:
 
     def insert_citations(self, answer, chunks, chunk_v,
                          embd_mdl, tkweight=0.1, vtweight=0.9):
+        """
+        在答案中插入引用标记。
+
+        :param answer: 原始答案字符串。
+        :param chunks: 文本块列表，用于与答案进行相似性比较。
+        :param chunk_v: 文本块的嵌入向量，用于计算相似性。
+        :param embd_mdl: 嵌入模型，用于编码答案片段。
+        :param tkweight: 词权重因子，用于混合相似度计算。
+        :param vtweight: 向量权重因子，用于混合相似度计算。
+        :return: 插入引用标记后的答案字符串和引用的文本块集合。
+        """
+        # 确保文本块和其嵌入向量的数量匹配
         assert len(chunks) == len(chunk_v)
+        # 如果文本块为空，则直接返回原始答案和空引用集合
         if not chunks:
             return answer, set([])
+        # 将答案字符串按代码块分割
         pieces = re.split(r"(```)", answer)
+        # 检查分割后的片段数量，如果足够多，则进一步处理
         if len(pieces) >= 3:
             i = 0
             pieces_ = []
+            # 遍历每个文本片段，进行进一步处理
             while i < len(pieces):
+                # 如果当前片段是 "```" 表明是代码块的开始
                 if pieces[i] == "```":
                     st = i
                     i += 1
+                    # 寻找代码块的结束位置
                     while i < len(pieces) and pieces[i] != "```":
                         i += 1
+                    # 如果找到了结束位置，加上结束符号并添加到结果中
                     if i < len(pieces):
                         i += 1
                     pieces_.append("".join(pieces[st: i]) + "\n")
                 else:
+                    # 对非代码块的文本进行分句处理，使用正则表达式根据句子结束符号进行分割
                     pieces_.extend(
                         re.split(
                             r"([^\|][；。？!！\n]|[a-z][.?;!][ \n])",
@@ -249,61 +269,89 @@ class Dealer:
             pieces = pieces_
         else:
             pieces = re.split(r"([^\|][；。？!！\n]|[a-z][.?;!][ \n])", answer)
+        # 遍历文本片段，对特定格式的短语进行合并
         for i in range(1, len(pieces)):
+            # 使用正则表达式匹配特定格式的短语，如中文或英文的句末标点
             if re.match(r"([^\|][；。？!！\n]|[a-z][.?;!][ \n])", pieces[i]):
+                # 将匹配到的短语合并到前一个片段
                 pieces[i - 1] += pieces[i][0]
                 pieces[i] = pieces[i][1:]
+
+        # 初始化索引列表和新的文本片段列表
         idx = []
         pieces_ = []
+        # 遍历处理后的文本片段，过滤掉长度小于5的片段
         for i, t in enumerate(pieces):
             if len(t) < 5:
                 continue
             idx.append(i)
             pieces_.append(t)
+
+        # 记录编码前后的文本片段信息
         es_logger.info("{} => {}".format(answer, pieces_))
+        # 如果没有有效的文本片段，则直接返回原始答案和空集合
         if not pieces_:
             return answer, set([])
 
+        # 使用模型对文本片段进行编码
         ans_v, _ = embd_mdl.encode(pieces_)
+        # 断言编码后的文本片段和原始chunk的维度匹配
         assert len(ans_v[0]) == len(chunk_v[0]), "The dimension of query and chunk do not match: {} vs. {}".format(
                 len(ans_v[0]), len(chunk_v[0]))
 
+        # 处理chunk文本，进行分词并移除网址
         chunks_tks = [rag_tokenizer.tokenize(self.qryr.rmWWW(ck)).split(" ")
                       for ck in chunks]
+        # 初始化引用字典
         cites = {}
+        # 设置相似度阈值
         thr = 0.63
+        # 当相似度阈值大于0.3且没有找到引用时，逐渐降低阈值继续搜索
         while thr>0.3 and len(cites.keys()) == 0 and pieces_ and chunks_tks:
             for i, a in enumerate(pieces_):
+                # 计算文本片段和chunk之间的相似度
                 sim, tksim, vtsim = self.qryr.hybrid_similarity(ans_v[i],
                                                                 chunk_v,
                                                                 rag_tokenizer.tokenize(
                                                                     self.qryr.rmWWW(pieces_[i])).split(" "),
                                                                 chunks_tks,
                                                                 tkweight, vtweight)
+                # 找出最大相似度
                 mx = np.max(sim) * 0.99
                 es_logger.info("{} SIM: {}".format(pieces_[i], mx))
+                # 如果最大相似度低于当前阈值，则跳过
                 if mx < thr:
                     continue
+                # 将相似的chunk索引添加到引用字典中
                 cites[idx[i]] = list(
                     set([str(ii) for ii in range(len(chunk_v)) if sim[ii] > mx]))[:4]
+            # 降低相似度阈值
             thr *= 0.8
 
+        # 初始化结果字符串和已处理chunk的集合
         res = ""
         seted = set([])
+        # 遍历原始文本片段，根据引用字典添加引用标记
         for i, p in enumerate(pieces):
             res += p
+            # 如果当前片段没有在过滤后的索引中，则跳过
             if i not in idx:
                 continue
+            # 如果当前片段没有相似的chunk，则跳过
             if i not in cites:
                 continue
             for c in cites[i]:
+                # 确保chunk索引有效
                 assert int(c) < len(chunk_v)
             for c in cites[i]:
+                # 如果chunk已经被处理，则跳过
                 if c in seted:
                     continue
+                # 添加引用标记到结果字符串中
                 res += f" ##{c}$$"
                 seted.add(c)
 
+        # 返回处理后的结果字符串和已处理chunk的集合
         return res, seted
 
     def rerank(self, sres, query, tkweight=0.3,
