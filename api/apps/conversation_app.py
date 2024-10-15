@@ -268,11 +268,16 @@ def list_conversation_names():
         # 查询所有指定的对话记录
         convs = ConversationService.get_by_ids(conv_ids)
 
-        # 提取每个对话的名称和ID，返回为字典格式
-        results = [{"name": conv.name, "id": conv.id, "dialog_id": conv.dialog_id} for conv in convs if conv is not None]
+        # 创建一个字典，便于按顺序查找
+        conv_dict = {conv.id: conv for conv in convs if conv is not None}
+
+        # 按照传入的顺序构造结果列表
+        results = [{"name": conv_dict[conv_id].name, "id": conv_id, "dialog_id": conv_dict[conv_id].dialog_id}
+                   for conv_id in conv_ids if conv_id in conv_dict]
 
         # 返回成功的响应，包含对话名称和ID列表
         return get_json_result(data=results)
     except Exception as e:
         # 捕获任何异常，返回服务器错误响应
         return server_error_response(e)
+
