@@ -30,4 +30,6 @@ def get_rag_version() -> typing.Optional[str]:
         typing.Optional[str]: RAGFLOW_VERSION的值，如果未设置则为"dev"。
     """
     # 从系统环境变量中获取 RAGFLOW_VERSION 的值，如果不存在则使用 "dev" 作为默认值
+    rag_version = os.getenv("RAGFLOW_VERSION", "dev")
+    print(f"RAGFLOW_VERSION is {rag_version}")
     return os.getenv("RAGFLOW_VERSION", "dev")
