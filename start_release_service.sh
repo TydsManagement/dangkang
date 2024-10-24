@@ -51,9 +51,9 @@ sudo systemctl daemon-reload
 
 # 启用并重新启动服务，以便新版本号生效
 echo "Enabling and restarting Ragflow service..."
-sudo systemctl enable ragflow.service
-sudo systemctl restart ragflow.service
+sudo systemctl enable ragflow_release.service
+sudo systemctl restart ragflow_release.service
 
 # 检查服务状态
 echo "Checking service status..."
-sudo systemctl status ragflow.service
+sudo systemctl status ragflow_release.service
