@@ -6,20 +6,22 @@ INSTALL_DIR="/opt/dangkang"
 # 设置版本号配置文件路径
 VERSION_FILE="$INSTALL_DIR/ragflow_version.conf"
 
-# 创建版本号配置文件（如果不存在）
-if [ ! -f "$VERSION_FILE" ]; then
+# 加载版本号
+if [ -f "$VERSION_FILE" ]; then
+  source $VERSION_FILE
+  echo "Loaded version: $RAGFLOW_VERSION"
+else
+  echo "Version file not found. Using default version: 1.0.1"
+  RAGFLOW_VERSION="1.0.1"
   echo "RAGFLOW_VERSION=1.0.1" | sudo tee $VERSION_FILE
 fi
 
-# 加载版本号
-source $VERSION_FILE
-
-# 创建 systemd 服务文件（如果不存在）
+# 创建 systemd 服务文件路径
 SERVICE_FILE="/etc/systemd/system/ragflow_release.service"
 
-if [ ! -f "$SERVICE_FILE" ]; then
-  echo "Creating systemd service file..."
-  cat <<EOF | sudo tee $SERVICE_FILE
+# 更新或创建 systemd 服务文件
+echo "Updating systemd service file..."
+cat <<EOF | sudo tee $SERVICE_FILE
 [Unit]
 Description=Ragflow Service
 After=network.target
@@ -42,16 +44,13 @@ Environment="RAGFLOW_VERSION=$RAGFLOW_VERSION" "TIMEZONE='Asia/Shanghai'"
 [Install]
 WantedBy=multi-user.target
 EOF
-else
-  echo "Service file already exists. Skipping creation."
-fi
 
 # 重新加载 systemd 配置
 echo "Reloading systemd daemon..."
 sudo systemctl daemon-reload
 
-# 启用并启动服务
-echo "Enabling and starting Ragflow service..."
+# 启用并重新启动服务，以便新版本号生效
+echo "Enabling and restarting Ragflow service..."
 sudo systemctl enable ragflow.service
 sudo systemctl restart ragflow.service
 
