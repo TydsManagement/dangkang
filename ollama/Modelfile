@@ -1,0 +1,1 @@
+FROM ./llama3.1_8b_chinese_chat_q4_k_m-shareAI.gguf
