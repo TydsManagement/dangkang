@@ -89,6 +89,11 @@ https://github.com/junedkhatri31/docker-volume-snapshot
 5. **在浏览器中访问** 🌐
     - 进入浏览器并输入服务器IP地址进行访问。
 
+
+###已知问题
+ 
+ https://www.elastic.co/guide/en/elasticsearch/reference/current/fix-watermark-errors.html
+
 #### 贡献指南
 
 我们欢迎任何形式的贡献，包括但不限于以下几种：
