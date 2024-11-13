@@ -31,8 +31,10 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/bin/bash -c "source /home/hnty/anaconda3/bin/activate ragflow && /bin/bash $INSTALL_DIR/ragflow-start.sh"
+ExecStart=/bin/bash -c "source /home/hnty/anaconda3/bin/activate ragflow && exec /bin/bash $INSTALL_DIR/ragflow-start.sh"
 Restart=always
+Environment="PATH=/usr/local/cuda-12.4/bin:/home/hnty/anaconda3/envs/ragflow/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64:/home/hnty/anaconda3/envs/ragflow/lib:/usr/lib/x86_64-linux-gnu"
 Environment="WS=2" "API_PORT=8000" "API_HOST=0.0.0.0" "API_TIMEOUT=30" "API_MAX_CONN=100" "API_MAX_RETRY=3" "API_RETRY_INTERVAL=10" "API_RETRY_TIMEOUT=5" "API_RETRY_MAX_CONN=100" "API_RETRY_MAX_RETRY=3" "API_RETRY_RETRY_INTERVAL=10" "API_RETRY_RETRY_TIMEOUT=5"
 Environment="STACK_VERSION=8.11.3" "ES_PORT=1200" "ELASTIC_PASSWORD=infini_rag_flow"
 Environment="KIBANA_PORT=6601" "KIBANA_USER=rag_flow" "KIBANA_PASSWORD=infini_rag_flow"
