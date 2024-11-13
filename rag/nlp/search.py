@@ -27,6 +27,9 @@ from rag.utils import rmSpace
 from rag.nlp import rag_tokenizer, query, is_english
 import numpy as np
 
+import opencc 
+#中文繁体转简体
+import re
 
 def index_name(uid): return f"ragflow_{uid}"
 
@@ -216,6 +219,7 @@ class Dealer:
 
             if m:
                 res[d["id"]] = m
+
         return res
 
     @staticmethod
@@ -295,6 +299,8 @@ class Dealer:
 
         # 使用模型对文本片段进行编码
         ans_v, _ = embd_mdl.encode(pieces_)
+        #BUG8809出现中文繁体处理
+        
         # 断言编码后的文本片段和原始chunk的维度匹配
         assert len(ans_v[0]) == len(chunk_v[0]), "The dimension of query and chunk do not match: {} vs. {}".format(
                 len(ans_v[0]), len(chunk_v[0]))
@@ -341,14 +347,22 @@ class Dealer:
             if i not in cites:
                 continue
             for c in cites[i]:
-                # 确保chunk索引有效
+                # 断言chunk索引有效
                 assert int(c) < len(chunk_v)
             for c in cites[i]:
                 # 如果chunk已经被处理，则跳过
                 if c in seted:
                     continue
                 # 添加引用标记到结果字符串中
-                res += f" ##{c}$$"
+                res += f" ##{c}$$" 
+                ##FIXME
+#                 # 使用 UTF-8 编码
+# bytes = str.encode("utf-8")
+# # 匹配和替换繁体字
+# new_str = re.sub(r"[\u4e00-\u9fa5]", "", str)
+
+
+
                 seted.add(c)
 
         # 返回处理后的结果字符串和已处理chunk的集合
